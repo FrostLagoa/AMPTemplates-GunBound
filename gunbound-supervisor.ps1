@@ -1,7 +1,10 @@
 param(
-    [string]$IrisRoot = "D:\AI\Iris",
     [string]$ServerRoot = "D:\Gunbound\Server",
     [string]$PythonExecutable = "D:\Python\Python310\python.exe",
+    [string]$CredentialStorePath = "D:\Gunbound\Server\config\iris-sql-vault.local.json",
+    [string]$DatabaseHost = "127.0.0.1",
+    [int]$DatabasePort = 3306,
+    [string]$DatabaseName = "gunbound",
     [int]$BrokerPort = 8372,
     [int]$GamePort = 8360,
     [int]$BuddyPort = 8352,
@@ -36,18 +39,27 @@ $restartEnabled = ConvertTo-Switch $AutoRestart
 $RestartLimit = [Math]::Max(0, [Math]::Min(10, $RestartLimit))
 $RestartBackoffSeconds = [Math]::Max(1, [Math]::Min(60, $RestartBackoffSeconds))
 $ShutdownTimeoutSeconds = [Math]::Max(5, [Math]::Min(120, $ShutdownTimeoutSeconds))
-$IrisRoot = Assert-SafePath $IrisRoot "IrisRoot"
 $ServerRoot = Assert-SafePath $ServerRoot "ServerRoot"
 $PythonExecutable = Assert-SafePath $PythonExecutable "PythonExecutable"
-$launcher = Join-Path $IrisRoot "scripts\run_gunbound_server.py"
+$CredentialStorePath = Assert-SafePath $CredentialStorePath "CredentialStorePath"
+$DatabaseHost = $DatabaseHost.Trim()
+$DatabaseName = $DatabaseName.Trim()
+if ([string]::IsNullOrWhiteSpace($DatabaseHost) -or $DatabaseHost.IndexOf('"') -ge 0) {
+    throw "DatabaseHost is invalid"
+}
+if ([string]::IsNullOrWhiteSpace($DatabaseName) -or $DatabaseName.IndexOf('"') -ge 0) {
+    throw "DatabaseName is invalid"
+}
+if ($DatabasePort -lt 1 -or $DatabasePort -gt 65535) { throw "DatabasePort is invalid" }
+$launcher = Join-Path $PSScriptRoot "gunbound-launcher.py"
 $jar = Join-Path $ServerRoot "target\GunBoundJavaEmulator-1.0-SNAPSHOT-jar-with-dependencies.jar"
 
-foreach ($required in @($IrisRoot, $ServerRoot)) {
+foreach ($required in @($ServerRoot)) {
     if (-not (Test-Path -LiteralPath $required -PathType Container)) {
         throw "Required folder does not exist: $required"
     }
 }
-foreach ($required in @($PythonExecutable, $launcher, $jar, (Join-Path $ServerRoot "config\config.properties"))) {
+foreach ($required in @($PythonExecutable, $launcher, $jar, $CredentialStorePath, (Join-Path $ServerRoot "config\config.properties"))) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required GunBound runtime file is missing: $required"
     }
@@ -76,8 +88,8 @@ function Test-UdpPort {
 function Start-GunBound {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $PythonExecutable
-    $startInfo.Arguments = ('"{0}" --server-root "{1}"' -f $launcher, $ServerRoot)
-    $startInfo.WorkingDirectory = $IrisRoot
+    $startInfo.Arguments = ('"{0}" --server-root "{1}" --credential-store "{2}" --database-host "{3}" --database-port {4} --database-name "{5}" --java "{6}"' -f $launcher, $ServerRoot, $CredentialStorePath, $DatabaseHost, $DatabasePort, $DatabaseName, $PythonExecutable)
+    $startInfo.WorkingDirectory = $ServerRoot
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardInput = $true
