@@ -28,6 +28,20 @@
     "EnumValues": {}
   },
   {
+    "DisplayName": "Java executable",
+    "Category": "GunBound:application",
+    "Subcategory": "Runtime:settings:1",
+    "Description": "Java runtime used to execute the GunBound server JAR.",
+    "Keywords": "java,jvm,runtime",
+    "FieldName": "JavaExecutable",
+    "InputType": "text",
+    "ParamFieldName": "JavaExecutable",
+    "DefaultValue": "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath\\java.exe",
+    "Placeholder": "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath\\java.exe",
+    "Required": true,
+    "EnumValues": {}
+  },
+  {
     "DisplayName": "Scoped Iris SQL Vault",
     "Category": "GunBound:application",
     "Subcategory": "Database:settings:2",

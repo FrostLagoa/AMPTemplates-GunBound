@@ -1,6 +1,7 @@
 param(
     [string]$ServerRoot = "D:\Gunbound\Server",
     [string]$PythonExecutable = "D:\Python\Python310\python.exe",
+    [string]$JavaExecutable = "C:\Program Files\Common Files\Oracle\Java\javapath\java.exe",
     [string]$CredentialStorePath = "D:\Gunbound\Server\config\iris-sql-vault.local.json",
     [string]$DatabaseHost = "127.0.0.1",
     [int]$DatabasePort = 3306,
@@ -41,6 +42,7 @@ $RestartBackoffSeconds = [Math]::Max(1, [Math]::Min(60, $RestartBackoffSeconds))
 $ShutdownTimeoutSeconds = [Math]::Max(5, [Math]::Min(120, $ShutdownTimeoutSeconds))
 $ServerRoot = Assert-SafePath $ServerRoot "ServerRoot"
 $PythonExecutable = Assert-SafePath $PythonExecutable "PythonExecutable"
+$JavaExecutable = Assert-SafePath $JavaExecutable "JavaExecutable"
 $CredentialStorePath = Assert-SafePath $CredentialStorePath "CredentialStorePath"
 $DatabaseHost = $DatabaseHost.Trim()
 $DatabaseName = $DatabaseName.Trim()
@@ -59,7 +61,7 @@ foreach ($required in @($ServerRoot)) {
         throw "Required folder does not exist: $required"
     }
 }
-foreach ($required in @($PythonExecutable, $launcher, $jar, $CredentialStorePath, (Join-Path $ServerRoot "config\config.properties"))) {
+foreach ($required in @($PythonExecutable, $JavaExecutable, $launcher, $jar, $CredentialStorePath, (Join-Path $ServerRoot "config\config.properties"))) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Required GunBound runtime file is missing: $required"
     }
@@ -88,7 +90,7 @@ function Test-UdpPort {
 function Start-GunBound {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $PythonExecutable
-    $startInfo.Arguments = ('"{0}" --server-root "{1}" --credential-store "{2}" --database-host "{3}" --database-port {4} --database-name "{5}" --java "{6}"' -f $launcher, $ServerRoot, $CredentialStorePath, $DatabaseHost, $DatabasePort, $DatabaseName, $PythonExecutable)
+    $startInfo.Arguments = ('"{0}" --server-root "{1}" --credential-store "{2}" --database-host "{3}" --database-port {4} --database-name "{5}" --java "{6}"' -f $launcher, $ServerRoot, $CredentialStorePath, $DatabaseHost, $DatabasePort, $DatabaseName, $JavaExecutable)
     $startInfo.WorkingDirectory = $ServerRoot
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
