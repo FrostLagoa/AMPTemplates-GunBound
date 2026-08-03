@@ -80,7 +80,7 @@ index a4ca490..9ed28c8 100644
  import java.util.concurrent.CopyOnWriteArrayList;
  import java.util.concurrent.CountDownLatch;
  import java.util.concurrent.ExecutorService;
-@@ -11,8 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
+@@ -11,7 +19,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  
  import br.com.gunbound.emulator.broker.GunBoundBrokerServer;
  import br.com.gunbound.emulator.buddy.GunBoundBuddyServer;
@@ -92,7 +92,6 @@ index a4ca490..9ed28c8 100644
 +import br.com.gunbound.emulator.model.entities.game.PlayerSessionManager;
  
  public class GunBoundStarter {
- 
 @@ -20,11 +32,15 @@ public class GunBoundStarter {
          ServerConfig config = ServerConfig.getInstance();
  
