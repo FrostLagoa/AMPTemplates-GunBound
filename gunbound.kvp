@@ -94,7 +94,7 @@ Console.ThrowawayMessageRegex=
 Console.AppReadyRegex=^\[supervisor\] READY broker=\d+ game=\d+ buddy=\d+ buddy_udp=\d+$
 Console.UserJoinRegex=^$
 Console.UserLeaveRegex=^$
-Console.UserChatRegex=^$
+Console.UserChatRegex=^(?:\[stdout\]\s+)?\[(?:CHAT|BCM)\]\s+(?<player>[^:]{1,32}):\s+(?<message>.+)$
 Console.UpdateAvailableRegex=^$
 Console.MetricsRegex=
 Console.SuppressLogAtStart=False

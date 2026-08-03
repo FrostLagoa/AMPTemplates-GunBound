@@ -204,6 +204,35 @@ function Stop-GunBound {
     [Console]::WriteLine("[supervisor] STOPPED")
 }
 
+function Send-IrisChatCommand {
+    param([Parameter(Mandatory = $true)][string]$CommandText)
+    $state = $script:runtime
+    if ($null -eq $state -or $state.Process.HasExited) {
+        [Console]::WriteLine("[supervisor] IRIS_CHAT_REJECTED runtime_unavailable")
+        return
+    }
+    if ($CommandText -notmatch '^iris-chat ([A-Za-z0-9+/]{1,512}={0,2})$') {
+        [Console]::WriteLine("[supervisor] IRIS_CHAT_REJECTED invalid_envelope")
+        return
+    }
+    try {
+        $bytes = [Convert]::FromBase64String($Matches[1])
+        $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+        $message = $strictUtf8.GetString($bytes)
+        if (-not $message.StartsWith('Iris: ', [StringComparison]::Ordinal) -or
+            $message.Length -gt 60 -or $message -match '[\x00-\x1F\x7F]') {
+            [Console]::WriteLine("[supervisor] IRIS_CHAT_REJECTED invalid_message")
+            return
+        }
+        $state.Process.StandardInput.WriteLine($CommandText)
+        $state.Process.StandardInput.Flush()
+        [Console]::WriteLine("[supervisor] IRIS_CHAT_FORWARDED")
+    }
+    catch {
+        [Console]::WriteLine("[supervisor] IRIS_CHAT_REJECTED decode_failed")
+    }
+}
+
 try {
     [Console]::WriteLine(("[supervisor] ROOT {0}" -f $ServerRoot))
     Start-GunBound
@@ -237,11 +266,13 @@ try {
             try { $line = $readTask.GetAwaiter().GetResult() } catch { $line = $null }
             if ($null -eq $line) { $inputClosed = $true }
             else {
-                $trimmed = $line.Trim().ToLowerInvariant()
-                if ($trimmed -in @("ampstop", "shutdown", "exit", "quit")) { $keepRunning = $false }
-                elseif ($trimmed -eq "status") { Write-GunBoundStatus }
-                elseif (-not [string]::IsNullOrWhiteSpace($trimmed)) {
-                    [Console]::WriteLine("[supervisor] GunBound has no safe command channel; use status or AMP controls.")
+                $commandText = $line.Trim()
+                $normalizedCommand = $commandText.ToLowerInvariant()
+                if ($normalizedCommand -in @("ampstop", "shutdown", "exit", "quit")) { $keepRunning = $false }
+                elseif ($normalizedCommand -eq "status") { Write-GunBoundStatus }
+                elseif ($normalizedCommand.StartsWith("iris-chat ")) { Send-IrisChatCommand -CommandText $commandText }
+                elseif (-not [string]::IsNullOrWhiteSpace($commandText)) {
+                    [Console]::WriteLine("[supervisor] Unsupported command. Use status, iris-chat, or AMP controls.")
                 }
                 $readTask = [Console]::In.ReadLineAsync()
             }

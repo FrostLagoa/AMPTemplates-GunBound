@@ -61,28 +61,39 @@ index 3690f6e..13fa847 100644
 \ No newline at end of file
 +</project>
 diff --git a/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java b/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
-index a4ca490..da1be76 100644
+index a4ca490..9ed28c8 100644
 --- a/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
 +++ b/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
-@@ -1,5 +1,8 @@
+@@ -1,7 +1,15 @@
  package br.com.gunbound.emulator;
  
 +import java.io.BufferedReader;
 +import java.io.IOException;
 +import java.io.InputStreamReader;
++import java.nio.ByteBuffer;
++import java.nio.charset.CodingErrorAction;
++import java.nio.charset.StandardCharsets;
  import java.util.ArrayList;
++import java.util.Base64;
  import java.util.List;
++import java.util.Locale;
  import java.util.concurrent.CopyOnWriteArrayList;
-@@ -11,6 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.CountDownLatch;
+ import java.util.concurrent.ExecutorService;
+@@ -11,8 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  
  import br.com.gunbound.emulator.broker.GunBoundBrokerServer;
  import br.com.gunbound.emulator.buddy.GunBoundBuddyServer;
 +import br.com.gunbound.emulator.buddy.udp.BuddyUdpService;
 +import br.com.gunbound.emulator.db.DatabaseManager;
  import br.com.gunbound.emulator.gameserver.GunBoundGameServer;
++import br.com.gunbound.emulator.gameserver.packets.readers.MessageBcmReader;
  import br.com.gunbound.emulator.model.entities.ServerOption;
++import br.com.gunbound.emulator.model.entities.game.PlayerSessionManager;
  
-@@ -20,11 +25,15 @@ public class GunBoundStarter {
+ public class GunBoundStarter {
+ 
+@@ -20,11 +32,15 @@ public class GunBoundStarter {
          ServerConfig config = ServerConfig.getInstance();
  
          String serverHost = config.getServerPublicIp();
@@ -98,7 +109,7 @@ index a4ca490..da1be76 100644
  
          ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
  
-@@ -44,15 +53,25 @@ public class GunBoundStarter {
+@@ -44,15 +60,25 @@ public class GunBoundStarter {
  
          // Inicializa servidores
          GunBoundGameServer gameServer = new GunBoundGameServer(gamePortServer);
@@ -126,7 +137,7 @@ index a4ca490..da1be76 100644
  
          // Inicia Game Server
          executor.submit(() -> {
-@@ -112,12 +131,15 @@ public class GunBoundStarter {
+@@ -112,12 +138,15 @@ public class GunBoundStarter {
              }
          });
  
@@ -144,7 +155,7 @@ index a4ca490..da1be76 100644
                  brokerServer.stop();
              } catch (Exception e) {
                  System.err.println("Erro ao parar servidores: " + e.getMessage());
-@@ -133,19 +155,41 @@ public class GunBoundStarter {
+@@ -133,19 +162,68 @@ public class GunBoundStarter {
                  Thread.currentThread().interrupt();
              }
              System.out.println("--- Gunbound Starter Encerrado ---");
@@ -169,14 +180,19 @@ index a4ca490..da1be76 100644
 +            BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
 +            String line;
 +            while ((line = input.readLine()) != null) {
-+                String command = line.trim().toLowerCase();
++                String commandText = line.trim();
++                String command = commandText.toLowerCase(Locale.ROOT);
 +                if (command.equals("ampstop") || command.equals("shutdown")
 +                        || command.equals("exit") || command.equals("quit")) {
 +                    shutdown.run();
 +                    return;
 +                }
++                if (command.startsWith("iris-chat ")) {
++                    handleIrisChatCommand(commandText);
++                    continue;
++                }
 +                if (!command.isEmpty()) {
-+                    System.out.println("Comando não suportado. Use ampstop ou os controles do AMP.");
++                    System.out.println("Comando não suportado. Use ampstop, iris-chat ou os controles do AMP.");
 +                }
 +            }
              Thread.currentThread().join();
@@ -185,6 +201,28 @@ index a4ca490..da1be76 100644
 +        } catch (IOException e) {
 +            System.err.println("Falha ao ler comandos do supervisor: " + e.getMessage());
 +            shutdown.run();
++        }
++    }
++
++    private static void handleIrisChatCommand(String commandText) {
++        String encoded = commandText.substring("iris-chat ".length()).trim();
++        try {
++            byte[] payload = Base64.getDecoder().decode(encoded);
++            String message = StandardCharsets.UTF_8.newDecoder()
++                .onMalformedInput(CodingErrorAction.REPORT)
++                .onUnmappableCharacter(CodingErrorAction.REPORT)
++                .decode(ByteBuffer.wrap(payload))
++                .toString();
++            boolean invalidControl = message.chars().anyMatch(value -> value < 32 || value == 127);
++            if (!message.startsWith("Iris: ") || message.length() > 60 || invalidControl) {
++                System.out.println("[IRIS_CHAT] REJECTED invalid_message");
++                return;
++            }
++            MessageBcmReader.broadcastSendMessage(message);
++            System.out.println("[IRIS_CHAT] DELIVERED recipients="
++                + PlayerSessionManager.getInstance().getActivePlayerCount());
++        } catch (Exception exception) {
++            System.out.println("[IRIS_CHAT] REJECTED invalid_envelope");
          }
      }
  }
