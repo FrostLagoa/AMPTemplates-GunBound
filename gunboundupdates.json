@@ -1,0 +1,12 @@
+[
+  {
+    "UpdateStageName": "Install GunBound supervisor",
+    "UpdateSourcePlatform": "Windows",
+    "UpdateSource": "FetchURL",
+    "UpdateSourceData": "https://raw.githubusercontent.com/FrostLagoa/AMPTemplates-GunBound/main/gunbound-supervisor.ps1",
+    "UpdateSourceArgs": "gunbound-supervisor.ps1",
+    "UpdateSourceTarget": "{{$FullRootDir}}",
+    "OverwriteExistingFiles": true,
+    "SkipOnFailure": false
+  }
+]

@@ -1,0 +1,605 @@
+diff --git a/pom.xml b/pom.xml
+index 3690f6e..13fa847 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -25,12 +25,6 @@
+             <version>${netty.version}</version>
+         </dependency>
+ 
+-        <dependency>
+-            <groupId>io.netty</groupId>
+-            <artifactId>netty-transport-native-epoll</artifactId>
+-            <version>4.2.6.Final</version>
+-        </dependency>
+-
+         <dependency>
+             <groupId>org.slf4j</groupId>
+             <artifactId>slf4j-api</artifactId>
+@@ -48,11 +42,11 @@
+             <artifactId>gson</artifactId>
+             <version>2.13.1</version>
+         </dependency>
+-        <!-- https://mvnrepository.com/artifact/org.mariadb.jdbc/mariadb-java-client -->
++        <!-- Official MySQL driver; required for the Iris account's sha256_password authentication. -->
+         <dependency>
+-            <groupId>org.mariadb.jdbc</groupId>
+-            <artifactId>mariadb-java-client</artifactId>
+-            <version>3.5.4</version>
++            <groupId>com.mysql</groupId>
++            <artifactId>mysql-connector-j</artifactId>
++            <version>26.7.0</version>
+         </dependency>
+         <!-- https://mvnrepository.com/artifact/com.zaxxer/HikariCP -->
+         <dependency>
+@@ -70,8 +64,7 @@
+                 <artifactId>maven-compiler-plugin</artifactId>
+                 <version>3.14.0</version>
+                 <configuration>
+-                    <source>${maven.compiler.source}</source>
+-                    <target>${maven.compiler.target}</target>
++                    <release>${maven.compiler.target}</release>
+                 </configuration>
+             </plugin>
+             <plugin>
+@@ -88,7 +81,16 @@
+                         <descriptorRef>jar-with-dependencies</descriptorRef>
+                     </descriptorRefs>
+                 </configuration>
++                <executions>
++                    <execution>
++                        <id>build-runnable-server</id>
++                        <phase>package</phase>
++                        <goals>
++                            <goal>single</goal>
++                        </goals>
++                    </execution>
++                </executions>
+             </plugin>
+         </plugins>
+     </build>
+-</project>
+\ No newline at end of file
++</project>
+diff --git a/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java b/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
+index a4ca490..da1be76 100644
+--- a/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
++++ b/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
+@@ -1,5 +1,8 @@
+ package br.com.gunbound.emulator;
+ 
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStreamReader;
+ import java.util.ArrayList;
+ import java.util.List;
+ import java.util.concurrent.CopyOnWriteArrayList;
+@@ -11,6 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ import br.com.gunbound.emulator.broker.GunBoundBrokerServer;
+ import br.com.gunbound.emulator.buddy.GunBoundBuddyServer;
++import br.com.gunbound.emulator.buddy.udp.BuddyUdpService;
++import br.com.gunbound.emulator.db.DatabaseManager;
+ import br.com.gunbound.emulator.gameserver.GunBoundGameServer;
+ import br.com.gunbound.emulator.model.entities.ServerOption;
+ 
+@@ -20,11 +25,15 @@ public class GunBoundStarter {
+         ServerConfig config = ServerConfig.getInstance();
+ 
+         String serverHost = config.getServerPublicIp();
++        String bindHost = config.getServerBindIp();
+         String serv1Name = config.getBrokerServ1Name();
+         String serv1Descr = config.getBrokerServ1Descr();
+         int brokerPort = config.getBrokerPort();
+         int gamePortServer = config.getGameServerPort();
+         int buddyPort = config.getBuddyServerPort();
++        int buddyUdpPort = config.getBuddyUdpPort();
++
++        DatabaseManager.validateConnection();
+ 
+         ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+ 
+@@ -44,15 +53,25 @@ public class GunBoundStarter {
+ 
+         // Inicializa servidores
+         GunBoundGameServer gameServer = new GunBoundGameServer(gamePortServer);
+-        GunBoundBuddyServer buddyServer = new GunBoundBuddyServer(serverHost, buddyPort);
++        GunBoundBuddyServer buddyServer = new GunBoundBuddyServer(bindHost, buddyPort);
++        BuddyUdpService buddyUdpService = BuddyUdpService.getInstance();
+         GunBoundBrokerServer brokerServer = new GunBoundBrokerServer(
+-            serverHost, brokerPort, serverOptions, gameServerSessions
++            bindHost, brokerPort, serverOptions, gameServerSessions
+         );
+ 
++        try {
++            buddyUdpService.start(bindHost, buddyUdpPort);
++        } catch (Exception e) {
++            System.err.println("Falha ao iniciar Buddy UDP: " + e.getMessage());
++            executor.shutdownNow();
++            return;
++        }
++
+         // Latches para sincronização
+         CountDownLatch gameServerLatch = new CountDownLatch(1);
+         CountDownLatch buddyServerLatch = new CountDownLatch(1);
+         AtomicBoolean gameServerStarted = new AtomicBoolean(false);
++        AtomicBoolean shuttingDown = new AtomicBoolean(false);
+ 
+         // Inicia Game Server
+         executor.submit(() -> {
+@@ -112,12 +131,15 @@ public class GunBoundStarter {
+             }
+         });
+ 
+-        // Shutdown hook para encerramento gracioso
+-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
++        Runnable shutdown = () -> {
++            if (!shuttingDown.compareAndSet(false, true)) {
++                return;
++            }
+             System.out.println("\n--- Encerrando servidores ---");
+             try {
+                 gameServer.stop();
+                 buddyServer.stop();
++                buddyUdpService.stop();
+                 brokerServer.stop();
+             } catch (Exception e) {
+                 System.err.println("Erro ao parar servidores: " + e.getMessage());
+@@ -133,19 +155,41 @@ public class GunBoundStarter {
+                 Thread.currentThread().interrupt();
+             }
+             System.out.println("--- Gunbound Starter Encerrado ---");
+-        }));
++        };
++
++        // Shutdown hook para encerramento gracioso
++        Runtime.getRuntime().addShutdownHook(new Thread(shutdown));
+ 
+         System.out.println("\n=== Gunbound Starter Iniciado ===");
++        System.out.println("Bind: " + bindHost);
+         System.out.println("Broker Server: " + serverHost + ":" + brokerPort);
+         System.out.println("Game Server: " + serverHost + ":" + gamePortServer);
+         System.out.println("Buddy Server: " + serverHost + ":" + buddyPort);
++        System.out.println("Buddy UDP: " + serverHost + ":" + buddyUdpPort);
+         System.out.println("Pressione Ctrl+C para encerrar.\n");
+ 
+-        // Mantém aplicação rodando
++        // AMP sends "ampstop" over STDIN. Interactive Ctrl+C continues to use the
++        // shutdown hook above.
+         try {
++            BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
++            String line;
++            while ((line = input.readLine()) != null) {
++                String command = line.trim().toLowerCase();
++                if (command.equals("ampstop") || command.equals("shutdown")
++                        || command.equals("exit") || command.equals("quit")) {
++                    shutdown.run();
++                    return;
++                }
++                if (!command.isEmpty()) {
++                    System.out.println("Comando não suportado. Use ampstop ou os controles do AMP.");
++                }
++            }
+             Thread.currentThread().join();
+         } catch (InterruptedException e) {
+             Thread.currentThread().interrupt();
++        } catch (IOException e) {
++            System.err.println("Falha ao ler comandos do supervisor: " + e.getMessage());
++            shutdown.run();
+         }
+     }
+ }
+diff --git a/src/main/java/br/com/gunbound/emulator/ServerConfig.java b/src/main/java/br/com/gunbound/emulator/ServerConfig.java
+index 2c5d6e9..df6289f 100644
+--- a/src/main/java/br/com/gunbound/emulator/ServerConfig.java
++++ b/src/main/java/br/com/gunbound/emulator/ServerConfig.java
+@@ -12,20 +12,25 @@ import java.util.Properties;
+  */
+ public final class ServerConfig {
+ 
+-	private static final String CONFIG_FILE = "config/config.properties";
++	private static final String DEFAULT_CONFIG_FILE = "config/config.properties";
+ 	private static final ServerConfig instance = new ServerConfig();
+ 
+ 	private final Properties properties = new Properties();
++	private final String configFile;
+ 
+ 	/**
+ 	 * Construtor privado que carrega o arquivo de configuração.
+ 	 */
+ 	private ServerConfig() {
+-		try (InputStream input = new FileInputStream(CONFIG_FILE)) {
++		String configuredPath = System.getenv("GUNBOUND_CONFIG_FILE");
++		configFile = configuredPath == null || configuredPath.isBlank()
++				? DEFAULT_CONFIG_FILE
++				: configuredPath.trim();
++		try (InputStream input = new FileInputStream(configFile)) {
+ 			properties.load(input);
+-			System.out.println("Arquivo de configuração '" + CONFIG_FILE + "' carregado com sucesso.");
++			System.out.println("Arquivo de configuração '" + configFile + "' carregado com sucesso.");
+ 		} catch (Exception e) {
+-			System.err.println("FATAL: Erro ao carregar o arquivo de configuração '" + CONFIG_FILE + "'.");
++			System.err.println("FATAL: Erro ao carregar o arquivo de configuração '" + configFile + "'.");
+ 			throw new RuntimeException(e);
+ 		}
+ 	}
+@@ -43,10 +48,14 @@ public final class ServerConfig {
+ 	 * Método genérico para buscar uma propriedade, com tratamento de erro.
+ 	 */
+ 	private String getProperty(String key) {
+-		String value = properties.getProperty(key);
++		String environmentKey = "GUNBOUND_" + key.toUpperCase().replace('.', '_');
++		String value = System.getenv(environmentKey);
++		if (value == null || value.trim().isEmpty()) {
++			value = properties.getProperty(key);
++		}
+ 		if (value == null || value.trim().isEmpty()) {
+ 			throw new RuntimeException("A chave de configuração obrigatória '" + key
+-					+ "' não foi encontrada ou está vazia em " + CONFIG_FILE);
++					+ "' não foi encontrada no ambiente ou em " + configFile);
+ 		}
+ 		return value.trim();
+ 	}
+@@ -57,6 +66,10 @@ public final class ServerConfig {
+ 		return getProperty("server.public.ip");
+ 	}
+ 
++	public String getServerBindIp() {
++		return getProperty("server.bind.ip");
++	}
++
+ 	public String getBrokerServ1Name() {
+ 		return getProperty("broker.serv1.name");
+ 	}
+@@ -172,4 +185,4 @@ public final class ServerConfig {
+ 	public String getDbuseSsl() {
+ 		return getProperty("db.useSSL");
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java b/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java
+index a729e9a..0e8bed2 100644
+--- a/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java
++++ b/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java
+@@ -7,7 +7,6 @@ import br.com.gunbound.emulator.Connection;
+ import br.com.gunbound.emulator.ConnectionManager;
+ import br.com.gunbound.emulator.model.entities.ServerOption;
+ import br.com.gunbound.emulator.utils.PacketUtils;
+-import br.com.gunbound.emulator.utils.Utils;
+ import io.netty.buffer.ByteBuf;
+ import io.netty.buffer.Unpooled;
+ import io.netty.channel.Channel;
+@@ -72,15 +71,6 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+ 		ByteBuf in = (ByteBuf) msg;// faz casting para ByteBuf
+ 		try {
+ 
+-			// Logar o pacote recebido ANTES de ser lido
+-			// Para isso, precisamos garantir que o ByteBuf não seja esgotado pela leitura
+-			// Usamos `duplicate()` para criar uma cópia que podemos ler sem afetar o buffer
+-			// original.
+-			ByteBuf packetData = in.duplicate();
+-
+-			// Converte os bytes do pacote para uma string hexadecimal para exibição
+-			String hexDump = Utils.toHexString(packetData);
+-
+ 			// Se precisar do UUID, você pode obtê-lo aqui
+ 			// Obtém as informações da conexão para o log
+ 			Connection clientConnection = connectionManager.getConnection(ctx.channel());
+@@ -88,10 +78,7 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+ 					? clientConnection.getIp() + " (ID: " + clientConnection.getId() + ")"
+ 					: "Desconhecido";
+ 
+-			System.out.println("\n--- Pacote Recebido de " + connectionInfo + " ---");
+-			System.out.println("Tamanho do pacote: " + in.readableBytes() + " bytes");
+-			System.out.println("Conteúdo do pacote (Hex): " + hexDump);
+-			System.out.println("----------------------------------------------\n");
++			System.out.println("BS: Pacote recebido de " + connectionInfo + " (" + in.readableBytes() + " bytes)");
+ 
+ 			// O decoder já removeu os 2 bytes de tamanho do início do pacote.
+ 			if (in.readableBytes() < 4) {
+@@ -234,4 +221,4 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+ 	    }
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/buddy/config/BuddyPacketLoggerHandler.java b/src/main/java/br/com/gunbound/emulator/buddy/config/BuddyPacketLoggerHandler.java
+index dc6c07e..beffaef 100644
+--- a/src/main/java/br/com/gunbound/emulator/buddy/config/BuddyPacketLoggerHandler.java
++++ b/src/main/java/br/com/gunbound/emulator/buddy/config/BuddyPacketLoggerHandler.java
+@@ -32,6 +32,9 @@ public class BuddyPacketLoggerHandler extends ChannelDuplexHandler {
+ 	}
+ 
+ 	private void logPacket(ChannelHandlerContext ctx, String direction, ByteBuf buf) {
++		if (!logger.isDebugEnabled()) {
++			return;
++		}
+ 		String remoteAddress = ctx.channel().remoteAddress().toString();
+ 		int length = buf.readableBytes();
+ 		// Usamos duplicate() para não alterar o readerIndex do buffer original
+@@ -44,6 +47,6 @@ public class BuddyPacketLoggerHandler extends ChannelDuplexHandler {
+ 		logMessage.append(hexdump);
+ 		logMessage.append("\n--------------------");
+ 
+-		logger.info(logMessage.toString());
++		logger.debug(logMessage.toString());
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java b/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java
+index fc86a58..f510864 100644
+--- a/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java
++++ b/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java
+@@ -1,9 +1,6 @@
+ package br.com.gunbound.emulator.buddy.udp;
+ 
+ import java.net.InetSocketAddress;
+-import java.util.concurrent.Executors;
+-import java.util.concurrent.ThreadFactory;
+-
+ import io.netty.bootstrap.Bootstrap;
+ import io.netty.buffer.ByteBuf;
+ import io.netty.channel.Channel;
+@@ -32,15 +29,16 @@ public class BuddyUdpService {
+ 	 * Inicia o serviço UDP. Deve ser chamado no startup do seu servidor.
+ 	 */
+ 	// Dentro da sua classe UdpService
+-    public synchronized void start() {
++	public synchronized void start(String bindHost, int port) throws InterruptedException {
+         if (group != null && !group.isTerminated()) {
+             throw new IllegalStateException("Serviço UDP já está em execução");
+         }
+ 
+-        ThreadFactory threadFactory = Executors.defaultThreadFactory(); // Usando Factory do Java
++        // A single event-loop is sufficient for this small datagram endpoint and
++        // avoids allocating one thread per processor on high-core-count hosts.
+         group = new MultiThreadIoEventLoopGroup(
+-            Runtime.getRuntime().availableProcessors(),
+-            threadFactory,
++            1,
++            Thread.ofPlatform().name("gunbound-buddy-udp-", 0).factory(),
+             NioIoHandler.newFactory()
+         );
+         
+@@ -58,17 +56,19 @@ public class BuddyUdpService {
+              });
+ 	        
+ 
+-	        channel = b.bind(8352).sync().channel();
+-	        System.out.println("Serviço de envio UDP (NIO) iniciado e pronto.");
++	        channel = b.bind(new InetSocketAddress(bindHost, port)).sync().channel();
++	        System.out.println("Buddy UDP iniciado em " + bindHost + ":" + port);
+ 
+ 	    } catch (InterruptedException e) {
+-	        System.err.println("Falha ao iniciar o serviço UDP.");
+ 	        Thread.currentThread().interrupt();
+-	        // Lembre-se de parar o grupo em caso de falha na inicialização.
+ 	        group.shutdownGracefully();
++	        group = null;
++	        throw e;
++	    } catch (RuntimeException e) {
++	        group.shutdownGracefully();
++	        group = null;
++	        throw e;
+ 	    }
+-	    // Não encerre o grupo aqui, ele precisa continuar rodando.
+-	    // Encerre-o em um método stop() ou no desligamento do servidor.
+ 	}
+ 	
+ 	
+@@ -97,12 +97,14 @@ public class BuddyUdpService {
+ 		}
+ 	}
+ 
+-	public void stop() {
++	public synchronized void stop() {
+ 		if (channel != null) {
+ 			channel.close();
++			channel = null;
+ 		}
+ 		if (group != null) {
+ 			group.shutdownGracefully();
++			group = null;
+ 		}
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java b/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java
+index 473b039..49ad0ea 100644
+--- a/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java
++++ b/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java
+@@ -35,15 +35,14 @@ public class DatabaseManager {
+ 			config.setUsername(user);
+ 			//config.setPassword(props.getProperty("password"));
+ 			config.setPassword(password);
+-			config.setDriverClassName("org.mariadb.jdbc.Driver");
++			config.setDriverClassName("com.mysql.cj.jdbc.Driver");
+ 
+ 			// --- CONFIGURAÇÕES OTIMIZADAS E ROBUSTAS PARA PRODUÇÃO ---
+ 
+-			// Um pool de 25 conexões é um bom ponto de partida para até ~500-1000
+-			// jogadores,
+-			// pois as operações de DB são rápidas e, no seu código, assíncronas.
+-			config.setMaximumPoolSize(50);
+-			config.setMinimumIdle(5);
++			// Keep the idle footprint small. The pool can grow when concurrent game
++			// persistence actually requires it.
++			config.setMaximumPoolSize(10);
++			config.setMinimumIdle(1);
+ 
+ 			// Tempo máximo que uma conexão pode viver no pool (ex: 30 minutos).
+ 			// Isso força uma rotação gradual das conexões, prevenindo problemas de "memory
+@@ -58,7 +57,7 @@ public class DatabaseManager {
+ 
+ 			// Tempo máximo para esperar por uma conexão do pool se ele estiver cheio (ex:
+ 			// 30 segundos).
+-			config.setConnectionTimeout(TimeUnit.SECONDS.toMillis(30));
++			config.setConnectionTimeout(TimeUnit.SECONDS.toMillis(10));
+ 
+ 			// **A SOLUÇÃO DEFINITIVA PARA CONEXÕES "ZUMBI"**
+ 			// Frequência com que o HikariCP enviará um "keepalive" (um ping a nível de
+@@ -93,6 +92,16 @@ public class DatabaseManager {
+ 		return dataSource.getConnection();
+ 	}
+ 
++	public static void validateConnection() {
++		try (Connection connection = getConnection()) {
++			if (!connection.isValid(5)) {
++				throw new SQLException("Database validation returned false");
++			}
++		} catch (SQLException e) {
++			throw new RuntimeException("Falha ao validar a conexão com o banco de dados.", e);
++		}
++	}
++
+ 
+ 	/*private static Properties loadProperties() {
+ 		String caminhoDbProperties = "config/db.properties"; // Caminho padrão
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java
+index 20bac02..79a876f 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java
+@@ -1,7 +1,5 @@
+ package br.com.gunbound.emulator.gameserver.packets.readers.room.gameplay;
+ 
+-import org.mariadb.jdbc.plugin.authentication.standard.ed25519.Utils;
+-
+ import br.com.gunbound.emulator.gameserver.handlers.GameAttributes;
+ import br.com.gunbound.emulator.gameserver.room.GameRoom;
+ import br.com.gunbound.emulator.model.entities.game.PlayerSession;
+@@ -38,16 +36,12 @@ public class GamePlayerResurrectReader {
+ 		try {
+ 			// 1. Descriptografa o payload do chat
+ 			byte[] authToken = ctx.channel().attr(GameAttributes.AUTH_TOKEN).get();
+-			byte[] decryptedPayload = GunBoundCipher.gunboundDynamicDecrypt(payload, player.getUserNameId(),
++			GunBoundCipher.gunboundDynamicDecrypt(payload, player.getUserNameId(),
+ 					player.getPassword(), authToken, OPCODE_REQUEST);
+-			
+-			
+-			System.out.println("[DEBUG] RESURRECT >>>> " + Utils.bytesToHex(decryptedPayload));
+-
+ 
+ 		} catch (Exception e) {
+ 			System.err.println("Erro ao processar pacote de Ressureição " + e.getMessage());
+ 			e.printStackTrace();
+ 		}
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultEndJewel.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultEndJewel.java
+index ec24483..c7fe4c7 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultEndJewel.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultEndJewel.java
+@@ -3,8 +3,6 @@ package br.com.gunbound.emulator.gameserver.packets.readers.room.gameplay;
+ import java.util.ArrayList;
+ import java.util.List;
+ 
+-import org.mariadb.jdbc.plugin.authentication.standard.ed25519.Utils;
+-
+ import br.com.gunbound.emulator.gameserver.handlers.GameAttributes;
+ import br.com.gunbound.emulator.gameserver.room.GameRoom;
+ import br.com.gunbound.emulator.model.entities.game.PlayerSession;
+@@ -58,8 +56,6 @@ public class GameResultEndJewel {
+ 	}
+ 
+ 	private static void processEndJewel(byte[] payload, GameRoom room) {
+-		System.out.println("DEBUG(TO ENCRYPT) processEndJewel >>>" + Utils.bytesToHex(payload));
+-
+ 		List<PlayerSession> recipients = new ArrayList<>(room.getPlayersBySlot().values());
+ 
+ 		for (PlayerSession player : recipients) {
+@@ -90,4 +86,4 @@ public class GameResultEndJewel {
+ 		}
+ 
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultReader.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultReader.java
+index fed6fde..29ef3a4 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultReader.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GameResultReader.java
+@@ -2,8 +2,6 @@ package br.com.gunbound.emulator.gameserver.packets.readers.room.gameplay;
+ 
+ import java.util.Map;
+ 
+-import org.mariadb.jdbc.plugin.authentication.standard.ed25519.Utils;
+-
+ import br.com.gunbound.emulator.gameserver.handlers.GameAttributes;
+ import br.com.gunbound.emulator.gameserver.room.GameRoom;
+ import br.com.gunbound.emulator.model.entities.game.PlayerGameResult;
+@@ -43,8 +41,6 @@ public class GameResultReader {
+ 			byte[] decryptedPayload = GunBoundCipher.gunboundDynamicDecrypt(payload, ps.getUserNameId(),
+ 					ps.getPassword(), authToken, OPCODE_REQUEST);
+ 
+-			System.out.println("ResultGame decrypted >> " + Utils.bytesToHex(decryptedPayload));
+-
+ 			room.getRoomEventLoop().schedule(() -> {
+ 				processEndGame(room, decryptedPayload);
+ 			}, 500, java.util.concurrent.TimeUnit.MILLISECONDS);
+@@ -121,4 +117,4 @@ public class GameResultReader {
+ 
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/resources/db.sql b/src/main/resources/db.sql
+index 4f30725..be24388 100644
+--- a/src/main/resources/db.sql
++++ b/src/main/resources/db.sql
+@@ -771,7 +771,7 @@ BEGIN
+     DECLARE v_guild VARCHAR(8);
+     DECLARE v_member_count INT;
+     DECLARE v_guild_total_score INT;
+-    DECLARE rank INT DEFAULT 0;
++    DECLARE v_rank INT DEFAULT 0;
+ 
+     /* Cursores sÃƒÂ³ aqui */
+     DECLARE rank_cursor CURSOR FOR
+@@ -783,7 +783,7 @@ BEGIN
+     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+ 
+     /* Ranking global */
+-    SET rank = 0;
++    SET v_rank = 0;
+     SET done = FALSE;
+     OPEN rank_cursor;
+     rank_loop: LOOP
+@@ -791,8 +791,8 @@ BEGIN
+         IF done THEN
+             LEAVE rank_loop;
+         END IF;
+-        SET rank = rank + 1;
+-        UPDATE game SET TotalRank = rank WHERE UserId = v_user_id;
++        SET v_rank = v_rank + 1;
++        UPDATE game SET TotalRank = v_rank WHERE UserId = v_user_id;
+     END LOOP;
+     CLOSE rank_cursor;
+ 
+diff --git a/src/main/resources/logback.xml b/src/main/resources/logback.xml
+index 95610a3..61be393 100644
+--- a/src/main/resources/logback.xml
++++ b/src/main/resources/logback.xml
+@@ -23,8 +23,15 @@
+         </encoder>
+     </appender>
+ 
+-    <logger name="BrokerLogger" level="DEBUG" />
+-    <logger name="GameServerLogger" level="DEBUG" />
++    <!-- Packet payload logging is disabled in normal operation to avoid leaking
++         authentication material and to keep AMP console/storage usage bounded. -->
++    <logger name="BrokerLogger" level="WARN" />
++    <logger name="GameServerLogger" level="WARN" />
++    <logger name="BrokerServerAcceptor" level="WARN" />
++    <logger name="GameServerAcceptor" level="WARN" />
++    <logger name="BuddyServerAcceptor" level="WARN" />
++    <logger name="br.com.gunbound.emulator.helpers" level="WARN" />
++    <logger name="br.com.gunbound.emulator.buddy.config.BuddyPacketLoggerHandler" level="WARN" />
+     <logger name="com.zaxxer.hikari" level="WARN" />
+ 
+     <root level="INFO">

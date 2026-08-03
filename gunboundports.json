@@ -1,0 +1,30 @@
+[
+  {
+    "Protocol": "TCP",
+    "Port": 8372,
+    "Ref": "ApplicationPort1",
+    "Name": "Broker service",
+    "Description": "Public GunBound directory and server-selection service"
+  },
+  {
+    "Protocol": "TCP",
+    "Port": 8360,
+    "Ref": "ApplicationPort2",
+    "Name": "Game service",
+    "Description": "Public GunBound game protocol service"
+  },
+  {
+    "Protocol": "TCP",
+    "Port": 8352,
+    "Ref": "ApplicationPort3",
+    "Name": "Buddy service",
+    "Description": "Public GunBound buddy and presence service"
+  },
+  {
+    "Protocol": "UDP",
+    "Port": 8381,
+    "Ref": "ApplicationPort4",
+    "Name": "Buddy datagram service",
+    "Description": "GunBound buddy datagram endpoint"
+  }
+]
