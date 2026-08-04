@@ -34,7 +34,8 @@
           "gameserver.passableauthority": "CfgGunboundConfigConfigPropertiesGameserverPassableauthority",
           "gameserver.funcrestrict": "CfgGunboundConfigConfigPropertiesGameserverFuncrestrict",
           "buddy.port": "CfgGunboundConfigConfigPropertiesBuddyPort",
-          "buddy.udp.port": "CfgGunboundConfigConfigPropertiesBuddyUdpPort"
+          "buddy.udp.port": "CfgGunboundConfigConfigPropertiesBuddyUdpPort",
+          "db.useSSL": "CfgGunboundConfigConfigPropertiesDbUseSSL"
         }
       }
     ]

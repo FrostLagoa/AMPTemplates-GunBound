@@ -1,7 +1,7 @@
 [
   {
     "DisplayName": "GunBound server folder",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Runtime:settings:1",
     "Description": "Existing GunBound Java checkout with the runnable JAR and non-secret configuration.",
     "Keywords": "gunbound,server,folder,path",
@@ -16,7 +16,7 @@
   },
   {
     "DisplayName": "Python executable",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Runtime:settings:1",
     "Description": "Python runtime used by the self-contained GunBound launcher.",
     "Keywords": "python,runtime,launcher",
@@ -31,7 +31,7 @@
   },
   {
     "DisplayName": "Java executable",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Runtime:settings:1",
     "Description": "Java runtime used to execute the GunBound server JAR.",
     "Keywords": "java,jvm,runtime",
@@ -46,7 +46,7 @@
   },
   {
     "DisplayName": "Scoped Iris SQL Vault",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Database:settings:2",
     "Description": "Machine-DPAPI credential file containing only the general Iris SQL identity.",
     "Keywords": "iris,sql,vault,dpapi,credential",
@@ -61,7 +61,7 @@
   },
   {
     "DisplayName": "Database host",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Database:settings:2",
     "Description": "Laragon MySQL host used by the GunBound schema.",
     "Keywords": "database,mysql,host",
@@ -75,7 +75,7 @@
   },
   {
     "DisplayName": "Database port",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Database:settings:2",
     "Description": "Laragon MySQL TCP port.",
     "Keywords": "database,mysql,port",
@@ -90,7 +90,7 @@
   },
   {
     "DisplayName": "Database name",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Database:settings:2",
     "Description": "GunBound database schema name.",
     "Keywords": "database,mysql,schema",
@@ -104,7 +104,7 @@
   },
   {
     "DisplayName": "Restart after a crash",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Recovery:heartbeat:3",
     "Description": "Restart after an unexpected exit. Manual AMP stops do not trigger recovery.",
     "Keywords": "restart,recovery,supervisor",
@@ -120,7 +120,7 @@
   },
   {
     "DisplayName": "Restart attempt limit",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Recovery:heartbeat:3",
     "Description": "Maximum consecutive restart attempts before AMP marks the application failed.",
     "Keywords": "restart,attempts,limit",
@@ -135,7 +135,7 @@
   },
   {
     "DisplayName": "Restart backoff (seconds)",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Recovery:heartbeat:3",
     "Description": "Base delay before restarting after an unexpected exit.",
     "Keywords": "restart,backoff,delay",
@@ -150,7 +150,7 @@
   },
   {
     "DisplayName": "Shutdown timeout (seconds)",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Shutdown:stop:4",
     "Description": "Time allowed for graceful Java shutdown before force termination.",
     "Keywords": "shutdown,timeout,stop",
@@ -165,7 +165,7 @@
   },
   {
     "DisplayName": "Server Public IP",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "server,public,ip",
@@ -178,7 +178,7 @@
   },
   {
     "DisplayName": "Server Bind IP",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "server,bind,ip",
@@ -191,7 +191,7 @@
   },
   {
     "DisplayName": "Broker Port",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "broker,port",
@@ -204,7 +204,7 @@
   },
   {
     "DisplayName": "Broker Serv1 Name",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "broker,serv1,name",
@@ -217,7 +217,7 @@
   },
   {
     "DisplayName": "Broker Serv1 Descr",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "broker,serv1,descr",
@@ -230,7 +230,7 @@
   },
   {
     "DisplayName": "Gameserver Port",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,port",
@@ -243,7 +243,7 @@
   },
   {
     "DisplayName": "Gameserver Tank Hidden Ratio",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,tank,hidden,ratio",
@@ -256,7 +256,7 @@
   },
   {
     "DisplayName": "Gameserver Goldfactor",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,goldfactor",
@@ -269,7 +269,7 @@
   },
   {
     "DisplayName": "Gameserver Scorefactor",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,scorefactor",
@@ -282,7 +282,7 @@
   },
   {
     "DisplayName": "Gameserver Stage0 Probability",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,stage0,probability",
@@ -295,7 +295,7 @@
   },
   {
     "DisplayName": "Gameserver Eventtrigger",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,eventtrigger",
@@ -308,7 +308,7 @@
   },
   {
     "DisplayName": "Gameserver Eventactprop",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,eventactprop",
@@ -321,7 +321,7 @@
   },
   {
     "DisplayName": "Gameserver Honkprice",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,honkprice",
@@ -334,7 +334,7 @@
   },
   {
     "DisplayName": "Gameserver Balloonprice",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,balloonprice",
@@ -347,7 +347,7 @@
   },
   {
     "DisplayName": "Gameserver Colorprice",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,colorprice",
@@ -360,7 +360,7 @@
   },
   {
     "DisplayName": "Gameserver Superuseritem",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,superuseritem",
@@ -373,7 +373,7 @@
   },
   {
     "DisplayName": "Gameserver Channelment",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,channelment",
@@ -386,7 +386,7 @@
   },
   {
     "DisplayName": "Gameserver Channeldaymsg",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,channeldaymsg",
@@ -399,7 +399,7 @@
   },
   {
     "DisplayName": "Gameserver Channelafternoonmsg",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,channelafternoonmsg",
@@ -412,7 +412,7 @@
   },
   {
     "DisplayName": "Gameserver Channelnightmsg",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,channelnightmsg",
@@ -425,7 +425,7 @@
   },
   {
     "DisplayName": "Gameserver Roomment",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,roomment",
@@ -438,7 +438,7 @@
   },
   {
     "DisplayName": "Gameserver Versionfirst",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,versionfirst",
@@ -451,7 +451,7 @@
   },
   {
     "DisplayName": "Gameserver Versionlast",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,versionlast",
@@ -464,7 +464,7 @@
   },
   {
     "DisplayName": "Gameserver Passableauthority",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,passableauthority",
@@ -477,7 +477,7 @@
   },
   {
     "DisplayName": "Gameserver Funcrestrict",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "gameserver,funcrestrict",
@@ -490,7 +490,7 @@
   },
   {
     "DisplayName": "Buddy Port",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "buddy,port",
@@ -503,7 +503,7 @@
   },
   {
     "DisplayName": "Buddy UDP Port",
-    "Category": "GunBound:gamepad",
+    "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
     "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
     "Keywords": "buddy,udp,port",
@@ -513,5 +513,21 @@
     "IncludeInCommandLine": false,
     "DefaultValue": "8381",
     "EnumValues": {}
+  },
+  {
+    "DisplayName": "DB Use SSL",
+    "Category": "Gunbound:gamepad",
+    "Subcategory": "Game server:gamepad:10",
+    "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
+    "Keywords": "db,usessl",
+    "FieldName": "CfgGunboundConfigConfigPropertiesDbUseSSL",
+    "InputType": "checkbox",
+    "ParamFieldName": "CfgGunboundConfigConfigPropertiesDbUseSSL",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "false",
+    "EnumValues": {
+      "Disabled": "false",
+      "Enabled": "true"
+    }
   }
 ]
