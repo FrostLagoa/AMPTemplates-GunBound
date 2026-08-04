@@ -44,6 +44,7 @@ $ServerRoot = Assert-SafePath $ServerRoot "ServerRoot"
 $PythonExecutable = Assert-SafePath $PythonExecutable "PythonExecutable"
 $JavaExecutable = Assert-SafePath $JavaExecutable "JavaExecutable"
 $CredentialStorePath = Assert-SafePath $CredentialStorePath "CredentialStorePath"
+& (Join-Path $PSScriptRoot "amp-config-link.ps1") -ServerRoot $ServerRoot
 $DatabaseHost = $DatabaseHost.Trim()
 $DatabaseName = $DatabaseName.Trim()
 if ([string]::IsNullOrWhiteSpace($DatabaseHost) -or $DatabaseHost.IndexOf('"') -ge 0) {

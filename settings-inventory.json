@@ -1,0 +1,10 @@
+{
+  "game": "GunBound",
+  "category": "GunBound:gamepad",
+  "generated_settings": 27,
+  "total_fields": 38,
+  "config_files": [
+    "config/config.properties"
+  ],
+  "excluded_contract": "Credentials, passwords, Vault material and integration-managed database connection strings are never exposed."
+}

@@ -11,3 +11,11 @@ The server hardening patch is pinned to upstream commit `421930cf69be564727269bb
 The `gunbound` schema is created from the reviewed upstream SQL after its MySQL 8 reserved-word correction. GunBound's legacy authentication protocol requires the player password itself to remain available to the game server and therefore cannot use a one-way password hash. Iris-generated GunBound passwords must be unique to this game, 6-12 characters, and never reused elsewhere.
 
 `gunbound-banner.jpg` is a 468 x 219 adaptation of the operator-provided Thor's Hammer artwork that keeps the complete logo visible. The public template repository contains only the AMP specification, launcher, supervisor, banner, non-secret configuration, and reproducible patches; it contains no client, server binaries, database contents, or credentials. The scoped Vault is generated locally by Iris provisioning and is never copied into this repository.
+
+AMP config version 4 uses the `GunBound:gamepad` page and exposes all 27 safe
+properties supported by the pinned server build. Save writes through the
+verified `runtime-config` junction into
+`D:\Gunbound\Server\config\config.properties`; no duplicate configuration is
+created under AMP. The JDBC URL and SSL fragment remain integration-managed,
+while SQL credentials remain exclusively in the scoped DPAPI Vault and are
+never rendered in the page or public template.

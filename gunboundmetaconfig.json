@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "ConfigFile": "runtime-config/config/config.properties",
+    "ConfigType": "kvp",
+    "ConfigFormat": "{0}={1}",
+    "ConfigFormatRegex": "^\\s*(?<key>[^#!\\s][^=]*?)\\s*=\\s*(?<value>.*?)\\s*$",
+    "Subsections": [
+      {
+        "Heading": "$root",
+        "SettingMappings": {
+          "server.public.ip": "CfgGunboundConfigConfigPropertiesServerPublicIp",
+          "server.bind.ip": "CfgGunboundConfigConfigPropertiesServerBindIp",
+          "broker.port": "CfgGunboundConfigConfigPropertiesBrokerPort",
+          "broker.serv1.name": "CfgGunboundConfigConfigPropertiesBrokerServ1Name",
+          "broker.serv1.descr": "CfgGunboundConfigConfigPropertiesBrokerServ1Descr",
+          "gameserver.port": "CfgGunboundConfigConfigPropertiesGameserverPort",
+          "gameserver.tank.hidden.ratio": "CfgGunboundConfigConfigPropertiesGameserverTankHiddenRatio",
+          "gameserver.goldfactor": "CfgGunboundConfigConfigPropertiesGameserverGoldfactor",
+          "gameserver.scorefactor": "CfgGunboundConfigConfigPropertiesGameserverScorefactor",
+          "gameserver.stage0_probability": "CfgGunboundConfigConfigPropertiesGameserverStage0Probability",
+          "gameserver.eventtrigger": "CfgGunboundConfigConfigPropertiesGameserverEventtrigger",
+          "gameserver.eventactprop": "CfgGunboundConfigConfigPropertiesGameserverEventactprop",
+          "gameserver.honkprice": "CfgGunboundConfigConfigPropertiesGameserverHonkprice",
+          "gameserver.balloonprice": "CfgGunboundConfigConfigPropertiesGameserverBalloonprice",
+          "gameserver.colorprice": "CfgGunboundConfigConfigPropertiesGameserverColorprice",
+          "gameserver.superuseritem": "CfgGunboundConfigConfigPropertiesGameserverSuperuseritem",
+          "gameserver.channelment": "CfgGunboundConfigConfigPropertiesGameserverChannelment",
+          "gameserver.channeldaymsg": "CfgGunboundConfigConfigPropertiesGameserverChanneldaymsg",
+          "gameserver.channelafternoonmsg": "CfgGunboundConfigConfigPropertiesGameserverChannelafternoonmsg",
+          "gameserver.channelnightmsg": "CfgGunboundConfigConfigPropertiesGameserverChannelnightmsg",
+          "gameserver.roomment": "CfgGunboundConfigConfigPropertiesGameserverRoomment",
+          "gameserver.versionfirst": "CfgGunboundConfigConfigPropertiesGameserverVersionfirst",
+          "gameserver.versionlast": "CfgGunboundConfigConfigPropertiesGameserverVersionlast",
+          "gameserver.passableauthority": "CfgGunboundConfigConfigPropertiesGameserverPassableauthority",
+          "gameserver.funcrestrict": "CfgGunboundConfigConfigPropertiesGameserverFuncrestrict",
+          "buddy.port": "CfgGunboundConfigConfigPropertiesBuddyPort",
+          "buddy.udp.port": "CfgGunboundConfigConfigPropertiesBuddyUdpPort"
+        }
+      }
+    ]
+  }
+]
