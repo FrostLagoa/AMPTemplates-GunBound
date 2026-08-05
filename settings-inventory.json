@@ -1,8 +1,8 @@
 {
   "game": "Gunbound",
   "category": "Gunbound:gamepad",
-  "generated_settings": 28,
-  "total_fields": 39,
+  "generated_settings": 30,
+  "total_fields": 41,
   "config_files": [
     "config/config.properties"
   ],

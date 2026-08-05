@@ -61,7 +61,7 @@ index 3690f6e..13fa847 100644
 \ No newline at end of file
 +</project>
 diff --git a/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java b/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
-index a4ca490..9ed28c8 100644
+index a4ca490..2714b2c 100644
 --- a/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
 +++ b/src/main/java/br/com/gunbound/emulator/GunBoundStarter.java
 @@ -1,7 +1,15 @@
@@ -80,7 +80,7 @@ index a4ca490..9ed28c8 100644
  import java.util.concurrent.CopyOnWriteArrayList;
  import java.util.concurrent.CountDownLatch;
  import java.util.concurrent.ExecutorService;
-@@ -11,7 +19,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
+@@ -11,8 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  
  import br.com.gunbound.emulator.broker.GunBoundBrokerServer;
  import br.com.gunbound.emulator.buddy.GunBoundBuddyServer;
@@ -92,13 +92,15 @@ index a4ca490..9ed28c8 100644
 +import br.com.gunbound.emulator.model.entities.game.PlayerSessionManager;
  
  public class GunBoundStarter {
-@@ -20,11 +32,15 @@ public class GunBoundStarter {
+ 
+@@ -20,11 +32,16 @@ public class GunBoundStarter {
          ServerConfig config = ServerConfig.getInstance();
  
          String serverHost = config.getServerPublicIp();
 +        String bindHost = config.getServerBindIp();
          String serv1Name = config.getBrokerServ1Name();
          String serv1Descr = config.getBrokerServ1Descr();
++        int serv1Capacity = config.getBrokerServ1Capacity();
          int brokerPort = config.getBrokerPort();
          int gamePortServer = config.getGameServerPort();
          int buddyPort = config.getBuddyServerPort();
@@ -108,7 +110,16 @@ index a4ca490..9ed28c8 100644
  
          ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
  
-@@ -44,15 +60,25 @@ public class GunBoundStarter {
+@@ -35,7 +52,7 @@ public class GunBoundStarter {
+         try {
+             serverOptions.add(new ServerOption(
+                 serv1Name, serv1Descr, serverHost, 
+-                gamePortServer, 0, 500, true
++                gamePortServer, 0, serv1Capacity, true
+             ));
+         } catch (Exception e) {
+             System.err.println("Erro ao criar ServerOption: " + e.getMessage());
+@@ -44,15 +61,25 @@ public class GunBoundStarter {
  
          // Inicializa servidores
          GunBoundGameServer gameServer = new GunBoundGameServer(gamePortServer);
@@ -136,7 +147,7 @@ index a4ca490..9ed28c8 100644
  
          // Inicia Game Server
          executor.submit(() -> {
-@@ -112,12 +138,15 @@ public class GunBoundStarter {
+@@ -112,12 +139,15 @@ public class GunBoundStarter {
              }
          });
  
@@ -154,7 +165,7 @@ index a4ca490..9ed28c8 100644
                  brokerServer.stop();
              } catch (Exception e) {
                  System.err.println("Erro ao parar servidores: " + e.getMessage());
-@@ -133,19 +162,68 @@ public class GunBoundStarter {
+@@ -133,19 +163,68 @@ public class GunBoundStarter {
                  Thread.currentThread().interrupt();
              }
              System.out.println("--- Gunbound Starter Encerrado ---");
@@ -226,7 +237,7 @@ index a4ca490..9ed28c8 100644
      }
  }
 diff --git a/src/main/java/br/com/gunbound/emulator/ServerConfig.java b/src/main/java/br/com/gunbound/emulator/ServerConfig.java
-index 2c5d6e9..df6289f 100644
+index 2c5d6e9..e37cd0b 100644
 --- a/src/main/java/br/com/gunbound/emulator/ServerConfig.java
 +++ b/src/main/java/br/com/gunbound/emulator/ServerConfig.java
 @@ -12,20 +12,25 @@ import java.util.Properties;
@@ -276,10 +287,14 @@ index 2c5d6e9..df6289f 100644
  		}
  		return value.trim();
  	}
-@@ -57,6 +66,10 @@ public final class ServerConfig {
+@@ -57,6 +66,14 @@ public final class ServerConfig {
  		return getProperty("server.public.ip");
  	}
  
++	public String getServerLanIp() {
++		return getProperty("server.lan.ip");
++	}
++
 +	public String getServerBindIp() {
 +		return getProperty("server.bind.ip");
 +	}
@@ -287,7 +302,22 @@ index 2c5d6e9..df6289f 100644
  	public String getBrokerServ1Name() {
  		return getProperty("broker.serv1.name");
  	}
-@@ -172,4 +185,4 @@ public final class ServerConfig {
+@@ -64,6 +81,14 @@ public final class ServerConfig {
+ 	public String getBrokerServ1Descr() {
+ 		return getProperty("broker.serv1.descr");
+ 	}
++
++	public int getBrokerServ1Capacity() {
++		int capacity = Integer.parseInt(getProperty("broker.serv1.capacity"));
++		if (capacity < 1 || capacity > 32767) {
++			throw new IllegalArgumentException("broker.serv1.capacity must be between 1 and 32767");
++		}
++		return capacity;
++	}
+ 	
+ 	public int getBrokerPort() {
+ 		return Integer.parseInt(getProperty("broker.port"));
+@@ -172,4 +197,4 @@ public final class ServerConfig {
  	public String getDbuseSsl() {
  		return getProperty("db.useSSL");
  	}
@@ -295,18 +325,47 @@ index 2c5d6e9..df6289f 100644
 \ No newline at end of file
 +}
 diff --git a/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java b/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java
-index a729e9a..0e8bed2 100644
+index a729e9a..ef25b10 100644
 --- a/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java
 +++ b/src/main/java/br/com/gunbound/emulator/broker/GunBoundBrokerServerHandler.java
-@@ -7,7 +7,6 @@ import br.com.gunbound.emulator.Connection;
+@@ -1,13 +1,15 @@
+ package br.com.gunbound.emulator.broker;
+ 
+ import java.net.InetSocketAddress;
++import java.net.InetAddress;
++import java.net.UnknownHostException;
+ import java.util.List;
+ 
+ import br.com.gunbound.emulator.Connection;
  import br.com.gunbound.emulator.ConnectionManager;
++import br.com.gunbound.emulator.ServerConfig;
  import br.com.gunbound.emulator.model.entities.ServerOption;
  import br.com.gunbound.emulator.utils.PacketUtils;
 -import br.com.gunbound.emulator.utils.Utils;
  import io.netty.buffer.ByteBuf;
  import io.netty.buffer.Unpooled;
  import io.netty.channel.Channel;
-@@ -72,15 +71,6 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+@@ -24,6 +26,7 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+ 
+ 	private final List<ServerOption> serverOptions;
+ 	private final List<Object> worldSession; // Lista de sessões ativas (para simular a ocupação)
++	private final InetAddress lanServerAddress;
+ 	// Utiliza AtomicInteger para a soma do tamanho dos pacotes, pois é thread-safe.
+ 	// (NAO TA USANDO)
+ 	// private final AtomicInteger socketRxSum = new AtomicInteger(0);
+@@ -36,6 +39,11 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+ 	public GunBoundBrokerServerHandler(List<ServerOption> serverOptions, List<Object> worldSession) {
+ 		this.serverOptions = serverOptions;
+ 		this.worldSession = worldSession;
++		try {
++			this.lanServerAddress = InetAddress.getByName(ServerConfig.getInstance().getServerLanIp());
++		} catch (UnknownHostException exception) {
++			throw new IllegalStateException("server.lan.ip is not a valid address", exception);
++		}
+ 	}
+ 
+ 	/**
+@@ -72,15 +80,6 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
  		ByteBuf in = (ByteBuf) msg;// faz casting para ByteBuf
  		try {
  
@@ -322,7 +381,7 @@ index a729e9a..0e8bed2 100644
  			// Se precisar do UUID, você pode obtê-lo aqui
  			// Obtém as informações da conexão para o log
  			Connection clientConnection = connectionManager.getConnection(ctx.channel());
-@@ -88,10 +78,7 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+@@ -88,10 +87,7 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
  					? clientConnection.getIp() + " (ID: " + clientConnection.getId() + ")"
  					: "Desconhecido";
  
@@ -334,7 +393,25 @@ index a729e9a..0e8bed2 100644
  
  			// O decoder já removeu os 2 bytes de tamanho do início do pacote.
  			if (in.readableBytes() < 4) {
-@@ -234,4 +221,4 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+@@ -167,11 +163,16 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
+ 		int currentUtilization = worldSession.size();
+ 
+ 		// Constrói o payload do diretório, um servidor por vez.
++		InetAddress clientAddress = ((InetSocketAddress) ctx.channel().remoteAddress()).getAddress();
++		boolean lanClient = clientAddress.isSiteLocalAddress() || clientAddress.isLoopbackAddress();
+ 		for (int i = 0; i < serverOptions.size(); i++) {
+ 			ServerOption option = serverOptions.get(i);
+ 			// Atualiza a ocupação do servidor antes de enviá-lo.
+ 			option.setServerUtilization(currentUtilization);
+-			directoryPayload.writeBytes(PacketUtils.getIndividualServer(option, i));
++			InetAddress advertisedAddress = lanClient ? lanServerAddress : option.getServerAddress();
++			directoryPayload.writeBytes(PacketUtils.getIndividualServer(option, i, advertisedAddress));
++			System.out.println("BS: Anunciando " + advertisedAddress.getHostAddress()
++					+ ":" + option.getServerPort() + " para " + clientAddress.getHostAddress());
+ 		}
+ 
+ 		// Gera o pacote completo e o envia.
+@@ -234,4 +235,4 @@ public class GunBoundBrokerServerHandler extends ChannelInboundHandlerAdapter {
  	    }
  	}
  
@@ -582,6 +659,44 @@ index fed6fde..29ef3a4 100644
  
  	}
  
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java b/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java
+index d4925c2..8a21cda 100644
+--- a/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java
++++ b/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java
+@@ -1,5 +1,6 @@
+ package br.com.gunbound.emulator.utils;
+ 
++import java.net.InetAddress;
+ import java.nio.charset.StandardCharsets;
+ 
+ import br.com.gunbound.emulator.model.entities.ServerOption;
+@@ -143,6 +144,10 @@ public class PacketUtils {
+ 	 * @return Um ByteBuf contendo os dados serializados do servidor.
+ 	 */
+ 	public static ByteBuf getIndividualServer(ServerOption entry, int position) {
++		return getIndividualServer(entry, position, entry.getServerAddress());
++	}
++
++	public static ByteBuf getIndividualServer(ServerOption entry, int position, InetAddress advertisedAddress) {
+ 		String extendedDescription = entry.getServerDescription() + "\r\n[" + entry.getServerUtilization() + "/"
+ 				+ entry.getServerCapacity() + "] players online";
+ 
+@@ -160,7 +165,7 @@ public class PacketUtils {
+ 		response.writeBytes(descriptionBytes);
+ 
+ 		// Escreve os bytes do endereço IP
+-		byte[] addressBytes = entry.getServerAddress().getAddress();
++		byte[] addressBytes = advertisedAddress.getAddress();
+ 		response.writeBytes(addressBytes);
+ 
+ 		response.writeBytes(intToBytes(entry.getServerPort(), 2, true)); // Porta (Big-endian)
+@@ -171,4 +176,4 @@ public class PacketUtils {
+ 
+ 		return response;
+ 	}
 -}
 \ No newline at end of file
 +}

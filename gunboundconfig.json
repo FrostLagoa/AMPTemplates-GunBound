@@ -177,6 +177,19 @@
     "EnumValues": {}
   },
   {
+    "DisplayName": "Server LAN IP",
+    "Category": "Gunbound:gamepad",
+    "Subcategory": "Game server:gamepad:10",
+    "Description": "Address advertised to clients connecting from a private or loopback network.",
+    "Keywords": "server,lan,private,ip",
+    "FieldName": "CfgGunboundConfigConfigPropertiesServerLanIp",
+    "InputType": "text",
+    "ParamFieldName": "CfgGunboundConfigConfigPropertiesServerLanIp",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "192.168.15.5",
+    "EnumValues": {}
+  },
+  {
     "DisplayName": "Server Bind IP",
     "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
@@ -226,6 +239,21 @@
     "ParamFieldName": "CfgGunboundConfigConfigPropertiesBrokerServ1Descr",
     "IncludeInCommandLine": false,
     "DefaultValue": "Jewel / Thor's Hammer",
+    "EnumValues": {}
+  },
+  {
+    "DisplayName": "Player slots",
+    "Category": "Gunbound:gamepad",
+    "Subcategory": "Game server:gamepad:10",
+    "Description": "Maximum simultaneous players advertised for this Gunbound world. Restart the server after changing it.",
+    "Keywords": "gunbound,players,slots,capacity,maximum",
+    "FieldName": "CfgGunboundConfigConfigPropertiesBrokerServ1Capacity",
+    "InputType": "number",
+    "ParamFieldName": "CfgGunboundConfigConfigPropertiesBrokerServ1Capacity",
+    "IncludeInCommandLine": false,
+    "DefaultValue": "500",
+    "MinValue": "1",
+    "MaxValue": "32767",
     "EnumValues": {}
   },
   {

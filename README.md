@@ -12,9 +12,10 @@ The `gunbound` schema is created from the reviewed upstream SQL after its MySQL 
 
 `gunbound-banner.jpg` is a 468 x 219 adaptation of the operator-provided Thor's Hammer artwork that keeps the complete logo visible. The public template repository contains only the AMP specification, launcher, supervisor, banner, non-secret configuration, and reproducible patches; it contains no client, server binaries, database contents, or credentials. The scoped Vault is generated locally by Iris provisioning and is never copied into this repository.
 
-AMP config version 5 uses the `Gunbound:gamepad` page and exposes all 28
+AMP config version 6 uses the `Gunbound:gamepad` page and exposes all 30
 non-secret properties supported by the pinned server build, including the SSL
-toggle. Save writes through the
+toggle, LAN endpoint and editable player-slot capacity. The same capacity is
+used in the broker's world-list packet instead of a compiled constant. Save writes through the
 verified `runtime-config` junction into
 `D:\Gunbound\Server\config\config.properties`; no duplicate configuration is
 created under AMP. The JDBC URL remains integration-managed, while SQL

@@ -9,10 +9,12 @@
         "Heading": "$root",
         "SettingMappings": {
           "server.public.ip": "CfgGunboundConfigConfigPropertiesServerPublicIp",
+          "server.lan.ip": "CfgGunboundConfigConfigPropertiesServerLanIp",
           "server.bind.ip": "CfgGunboundConfigConfigPropertiesServerBindIp",
           "broker.port": "CfgGunboundConfigConfigPropertiesBrokerPort",
           "broker.serv1.name": "CfgGunboundConfigConfigPropertiesBrokerServ1Name",
           "broker.serv1.descr": "CfgGunboundConfigConfigPropertiesBrokerServ1Descr",
+          "broker.serv1.capacity": "CfgGunboundConfigConfigPropertiesBrokerServ1Capacity",
           "gameserver.port": "CfgGunboundConfigConfigPropertiesGameserverPort",
           "gameserver.tank.hidden.ratio": "CfgGunboundConfigConfigPropertiesGameserverTankHiddenRatio",
           "gameserver.goldfactor": "CfgGunboundConfigConfigPropertiesGameserverGoldfactor",
