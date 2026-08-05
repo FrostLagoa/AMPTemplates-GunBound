@@ -1,6 +1,6 @@
 [
   {
-    "ConfigFile": "runtime-config/iris-legacy-settings.properties",
+    "ConfigFile": "gunbound-amp/runtime-config/iris-legacy-settings.properties",
     "ConfigType": "kvp",
     "ConfigFormat": "{0}={1}",
     "ConfigFormatRegex": "^\\s*(?<key>[^#!\\s][^=]*?)\\s*=\\s*(?<value>.*?)\\s*$",
@@ -23,3 +23,4 @@
     ]
   }
 ]
+

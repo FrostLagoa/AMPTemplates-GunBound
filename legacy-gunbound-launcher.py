@@ -20,6 +20,20 @@ LOCAL_MACHINE_PROVIDER = "windows-dpapi-local-machine"
 MAX_STORE_BYTES = 1_048_576
 MAX_SETTINGS_BYTES = 65_536
 STOP_TIMEOUT_SECONDS = 30
+DEFAULT_LEGACY_SETTINGS = {
+    "game.item.seal": "30",
+    "game.item.enchant.1_4": "60",
+    "game.item.enchant.5_8": "50",
+    "game.item.enchant.9_12": "40",
+    "game.item.enchant.13_16": "30",
+    "game.item.enchant.17_18": "20",
+    "game.item.enchant.19_20": "10",
+    "game.item.enchant.21_30": "5",
+    "event.actprop.0": "0",
+    "event.actprop.1": "0",
+    "event.actprop.2": "0",
+    "event.actprop.3": "0",
+}
 
 
 class LegacyGunBoundLaunchError(RuntimeError):
@@ -158,7 +172,7 @@ def mysql_projection(credentials: dict[str, str], host: str, port: int, database
 def project_runtime_configs(
     server_root: Path, credentials: dict[str, str], database_host: str, database_port: int, database_name: str
 ) -> tuple[int, int]:
-    settings = load_properties(server_root / "iris-legacy-settings.properties")
+    settings = {**DEFAULT_LEGACY_SETTINGS, **load_properties(server_root / "iris-legacy-settings.properties")}
     broker_port = required_int(settings, "broker.port", 1, 65535)
     game_port = required_int(settings, "game.port", 1, 65535)
     broker = load_json_template(server_root / "BrokerServer" / "Config.json")
@@ -213,6 +227,31 @@ def project_runtime_configs(
     return broker_port, game_port
 
 
+def sanitize_runtime_configs(server_root: Path) -> None:
+    """Restore the credential-free templates after the native processes exit.
+
+    The legacy executables can only consume their database settings from JSON.
+    The launcher therefore projects the Vault identity immediately before process
+    start, then restores the credential-free templates on normal shutdown,
+    startup failure, and explicit sanitisation.
+    """
+    for config_path in (
+        server_root / "BrokerServer" / "Config.json",
+        server_root / "GameServer" / "Config" / "Config.json",
+    ):
+        template_path = config_path.with_name(f"{config_path.stem}.iris-template.json")
+        try:
+            template = json.loads(template_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise LegacyGunBoundLaunchError(
+                f"The protected WC2 configuration template is unavailable: {template_path}"
+            ) from exc
+        if not isinstance(template, dict):
+            raise LegacyGunBoundLaunchError(f"The protected WC2 configuration template is invalid: {template_path}")
+        template.pop("Mysql", None)
+        write_json_atomic(config_path, template)
+
+
 def start_pair(server_root: Path) -> tuple[subprocess.Popen[bytes], subprocess.Popen[bytes]]:
     broker = subprocess.Popen([str(server_root / "BrokerServer" / "BrokerServer.exe")], cwd=server_root / "BrokerServer")
     time.sleep(0.75)
@@ -241,6 +280,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database-port", type=int, default=3306)
     parser.add_argument("--database-name", default="gunbound")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--sanitize", action="store_true")
     return parser.parse_args()
 
 
@@ -258,6 +298,10 @@ def main() -> int:
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise LegacyGunBoundLaunchError(f"Required WC2 runtime files are unavailable: {missing}")
+    if args.sanitize:
+        sanitize_runtime_configs(server_root)
+        print(json.dumps({"ok": True, "sanitized": True, "password_disclosed": False}))
+        return 0
     credentials = load_iris_database_credentials(args.credential_store.resolve())
     broker_port, game_port = project_runtime_configs(
         server_root, credentials, args.database_host.strip(), args.database_port, args.database_name.strip()
@@ -281,7 +325,10 @@ def main() -> int:
             broker_code = processes[0].poll()
             game_code = processes[1].poll()
             if broker_code is not None or game_code is not None:
-                return int(broker_code if broker_code is not None else game_code or 1)
+                # A child exiting, even with code 0, means the legacy server stopped
+                # unexpectedly. Return a non-zero code so the AMP supervisor can
+                # accurately surface the failure and apply its bounded recovery policy.
+                return int((broker_code if broker_code is not None else game_code) or 1)
             time.sleep(0.5)
         return 0
     finally:
@@ -292,6 +339,7 @@ def main() -> int:
                 except Exception:
                     pass
         credentials["password"] = ""
+        sanitize_runtime_configs(server_root)
 
 
 if __name__ == "__main__":

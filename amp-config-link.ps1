@@ -24,8 +24,7 @@ function Ensure-ConfigurationJunction {
     [void](New-Item -ItemType Junction -Path $fullPath -Target $target)
 }
 
-# AMP versions resolve MetaConfig paths relative to either the instance base
-# directory or the application root.  Maintaining the same verified junction in
-# both locations keeps the template portable across those versions.
+# The WC2 MetaConfig path is explicitly anchored below the application root.
+# Keeping only that junction avoids inheriting a stale instance-root junction
+# from a previous template revision.
 Ensure-ConfigurationJunction -Path (Join-Path $PSScriptRoot "runtime-config")
-Ensure-ConfigurationJunction -Path (Join-Path (Split-Path $PSScriptRoot -Parent) "runtime-config")

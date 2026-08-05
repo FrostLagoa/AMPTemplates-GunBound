@@ -3,8 +3,10 @@ param(
     [string]$PythonExecutable = "D:\Python\Python310\python.exe",
     [string]$CredentialStorePath = "D:\Gunbound\config\iris-sql-vault.local.json",
     [string]$DatabaseHost = "127.0.0.1",
-    [int]$DatabasePort = 3306,
+    [int]$DatabasePort = 3303,
     [string]$DatabaseName = "gunbound",
+    [string]$CompatibilityMySqlExecutable = "D:\Laragon\bin\mysql\mysql-5.7.44-winx64\bin\mysqld.exe",
+    [string]$CompatibilityMySqlConfig = "D:\Laragon\bin\mysql\mysql-5.7.44-winx64\my-gunbound.ini",
     [int]$BrokerPort = 8400,
     [int]$GamePort = 8401,
     [string]$AutoRestart = "true",
@@ -17,6 +19,7 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $script:stopping = $false
 $script:runtime = $null
+$script:compatibilityDatabase = $null
 $script:restartCount = 0
 
 function ConvertTo-Switch {
@@ -40,6 +43,41 @@ function Test-TcpPort {
     }
     catch { return $false }
     finally { $client.Dispose() }
+}
+
+function Ensure-CompatibilityDatabase {
+    if (Test-TcpPort -Port $DatabasePort) {
+        [Console]::WriteLine("[supervisor] DATABASE ready host=127.0.0.1 port=$DatabasePort owner=existing")
+        return
+    }
+    $executable = Assert-SafePath $CompatibilityMySqlExecutable "CompatibilityMySqlExecutable"
+    $configuration = Assert-SafePath $CompatibilityMySqlConfig "CompatibilityMySqlConfig"
+    foreach ($required in @($executable, $configuration)) {
+        if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+            throw "Required GunBound compatibility MySQL file is missing: $required"
+        }
+    }
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $executable
+    $startInfo.Arguments = ('--defaults-file="{0}"' -f $configuration)
+    $startInfo.WorkingDirectory = Split-Path -Parent $executable
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw "Could not start the GunBound compatibility MySQL service" }
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        if ($process.HasExited) { throw "GunBound compatibility MySQL exited during startup ($($process.ExitCode))" }
+        if (Test-TcpPort -Port $DatabasePort) {
+            $script:compatibilityDatabase = $process
+            [Console]::WriteLine("[supervisor] DATABASE ready host=127.0.0.1 port=$DatabasePort owner=AMP")
+            return
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
+    throw "GunBound compatibility MySQL did not open TCP port $DatabasePort within 30 seconds"
 }
 
 function Ensure-LegacySettings {
@@ -119,6 +157,8 @@ $ShutdownTimeoutSeconds = [Math]::Max(5, [Math]::Min(120, $ShutdownTimeoutSecond
 $ServerRoot = Assert-SafePath $ServerRoot "ServerRoot"
 $PythonExecutable = Assert-SafePath $PythonExecutable "PythonExecutable"
 $CredentialStorePath = Assert-SafePath $CredentialStorePath "CredentialStorePath"
+$CompatibilityMySqlExecutable = Assert-SafePath $CompatibilityMySqlExecutable "CompatibilityMySqlExecutable"
+$CompatibilityMySqlConfig = Assert-SafePath $CompatibilityMySqlConfig "CompatibilityMySqlConfig"
 $DatabaseHost = $DatabaseHost.Trim()
 $DatabaseName = $DatabaseName.Trim()
 if ([string]::IsNullOrWhiteSpace($DatabaseHost) -or [string]::IsNullOrWhiteSpace($DatabaseName) -or $DatabasePort -lt 1 -or $DatabasePort -gt 65535) {
@@ -133,6 +173,7 @@ foreach ($required in @($PythonExecutable, $CredentialStorePath, $launcher, (Joi
 Ensure-LegacySettings -Path $settings
 Set-SettingValue -Path $settings -Key "broker.port" -Value ([string]$BrokerPort)
 Set-SettingValue -Path $settings -Key "game.port" -Value ([string]$GamePort)
+Ensure-CompatibilityDatabase
 
 function Start-GunBound {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -194,6 +235,9 @@ try {
         [Console]::WriteLine("[supervisor] READY broker=$BrokerPort game=$GamePort")
         while (-not $script:runtime.Process.HasExited) {
             Drain-GunBoundOutput
+            if (-not (Test-TcpPort -Port $DatabasePort)) {
+                throw "GunBound compatibility MySQL is no longer listening on TCP port $DatabasePort"
+            }
             if ([Console]::KeyAvailable) {
                 $command = [Console]::ReadLine()
                 if ($command -eq "ampstop") { $script:stopping = $true; break }
@@ -213,5 +257,9 @@ try {
 }
 finally {
     if ($null -ne $script:runtime) { Stop-ProcessTree -Process $script:runtime.Process }
+    if ($null -ne $script:compatibilityDatabase -and -not $script:compatibilityDatabase.HasExited) {
+        try { Stop-Process -Id $script:compatibilityDatabase.Id -Force -ErrorAction SilentlyContinue } catch {}
+    }
     [Console]::WriteLine("[supervisor] STOPPED")
 }
+
