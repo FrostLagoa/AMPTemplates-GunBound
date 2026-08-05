@@ -3,8 +3,25 @@
 This template controls the operator-provided native WC2 v894 server in
 `D:\Gunbound`. It starts the original `BrokerServer.exe` and
 `GameServer.exe` as one supervised application, keeps their output in the AMP
-Console, and verifies the Broker (`8400/TCP`) and Game (`8401/TCP`) ports
-before AMP reports the instance ready.
+Console, and verifies the external Broker (`8400/TCP`), LAN Broker
+(`8402/TCP`) and shared Game (`8401/TCP`) ports before AMP reports the
+instance ready.
+
+## Dual-Broker networking
+
+The template starts two isolated native Broker processes against the same
+`gunbound` schema and the same single Game Server process. The external Broker
+uses the configurable public DDNS hostname (by default
+`server.kallidos.com`) and remains on `8400/TCP`. The LAN Broker listens on
+`8402/TCP` and advertises the configurable private address (by default
+`192.168.15.5`). It is intentionally a LAN-only entry point: do not create a
+router forwarding rule for it, and scope any host-firewall allow rule to the
+private subnets that need it.
+
+Both Broker paths reach the Game Server on `8401/TCP`; they do not create
+separate worlds, accounts, sessions or databases. A local client must be
+configured to use the LAN Broker port, while a distributed client must keep
+the external DDNS Broker endpoint.
 
 ## Database compatibility
 

@@ -1,10 +1,10 @@
 {
   "game": "Gunbound",
   "category": "Gunbound:gamepad",
-  "generated_settings": 20,
-  "total_fields": 30,
+  "generated_settings": 32,
+  "total_fields": 44,
   "config_files": [
-    "config/db.properties"
+    "iris-legacy-settings.properties"
   ],
   "excluded_contract": "Credentials, passwords, Vault material and integration-managed database connection strings are never exposed."
 }

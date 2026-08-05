@@ -12,7 +12,12 @@
     "Ref": "ApplicationPort2",
     "Name": "Game service",
     "Description": "Public WC2 game protocol service"
+  },
+  {
+    "Protocol": "TCP",
+    "Port": 8402,
+    "Ref": "ApplicationPort3",
+    "Name": "LAN Broker service",
+    "Description": "Private-LAN WC2 server-directory and world-selection service"
   }
 ]
-
-

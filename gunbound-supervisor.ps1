@@ -85,6 +85,8 @@ function Ensure-LegacySettings {
     $defaults = @(
         "# Iris-managed, non-secret GunBound WC2 v894 settings.",
         "broker.port=$BrokerPort",
+        "broker.lan.port=8402",
+        "broker.lan.world.address=192.168.15.5",
         "broker.world.name=Kallidos Gunbound",
         "broker.world.description=Welcome to the Server!",
         "broker.world.address=server.kallidos.com",
@@ -147,6 +149,18 @@ function Set-SettingValue {
     [IO.File]::WriteAllLines($Path, $lines, [Text.UTF8Encoding]::new($false))
 }
 
+function Get-SettingInteger {
+    param([string]$Path, [string]$Key, [int]$Minimum = 1, [int]$Maximum = 65535)
+    $match = [IO.File]::ReadAllLines($Path) | Where-Object { $_ -match ("^\\s*" + [Regex]::Escape($Key) + "\\s*=") } | Select-Object -First 1
+    if ($null -eq $match) { throw "Required setting $Key is missing" }
+    $valueText = ($match -split "=", 2)[1].Trim()
+    $value = 0
+    if (-not [int]::TryParse($valueText, [ref]$value) -or $value -lt $Minimum -or $value -gt $Maximum) {
+        throw "Setting $Key must be an integer between $Minimum and $Maximum"
+    }
+    return $value
+}
+
 function Get-DescendantProcessIds {
     param([int]$RootProcessId)
     $children = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ParentProcessId -eq $RootProcessId })
@@ -192,6 +206,8 @@ foreach ($required in @($PythonExecutable, $CredentialStorePath, $launcher, (Joi
 Ensure-LegacySettings -Path $settings
 Set-SettingValue -Path $settings -Key "broker.port" -Value ([string]$BrokerPort)
 Set-SettingValue -Path $settings -Key "game.port" -Value ([string]$GamePort)
+$LanBrokerPort = Get-SettingInteger -Path $settings -Key "broker.lan.port"
+if ($LanBrokerPort -eq $BrokerPort -or $LanBrokerPort -eq $GamePort) { throw "The LAN Broker port must differ from the external Broker and Game Server ports" }
 Ensure-CompatibilityDatabase
 
 function Start-GunBound {
@@ -236,7 +252,7 @@ function Wait-GunBoundReady {
     while ([DateTime]::UtcNow -lt $deadline) {
         Drain-GunBoundOutput
         if ($script:runtime.Process.HasExited) { return $false }
-        if ((Test-TcpPort -Port $BrokerPort) -and (Test-TcpPort -Port $GamePort)) { return $true }
+        if ((Test-TcpPort -Port $BrokerPort) -and (Test-TcpPort -Port $LanBrokerPort) -and (Test-TcpPort -Port $GamePort)) { return $true }
         Start-Sleep -Milliseconds 250
     }
     return $false
@@ -244,14 +260,14 @@ function Wait-GunBoundReady {
 
 function Write-GunBoundStatus {
     $state = if ($null -ne $script:runtime -and -not $script:runtime.Process.HasExited) { "running" } else { "stopped" }
-    [Console]::WriteLine("[supervisor] STATUS state=$state broker=$BrokerPort game=$GamePort restarts=$script:restartCount")
+    [Console]::WriteLine("[supervisor] STATUS state=$state external_broker=$BrokerPort lan_broker=$LanBrokerPort game=$GamePort restarts=$script:restartCount")
 }
 
 try {
     while (-not $script:stopping) {
         Start-GunBound
-        if (-not (Wait-GunBoundReady)) { throw "GunBound WC2 did not open TCP ports $BrokerPort and $GamePort within 120 seconds" }
-        [Console]::WriteLine("[supervisor] READY broker=$BrokerPort game=$GamePort")
+        if (-not (Wait-GunBoundReady)) { throw "GunBound WC2 did not open TCP ports $BrokerPort, $LanBrokerPort and $GamePort within 120 seconds" }
+        [Console]::WriteLine("[supervisor] READY external_broker=$BrokerPort lan_broker=$LanBrokerPort game=$GamePort")
         while (-not $script:runtime.Process.HasExited) {
             Drain-GunBoundOutput
             if (-not (Test-TcpPort -Port $DatabasePort)) {

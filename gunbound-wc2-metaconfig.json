@@ -9,6 +9,8 @@
         "broker.world.name":"CfgWc2WorldName",
         "broker.world.description":"CfgWc2WorldDescription",
         "broker.world.address":"CfgWc2WorldAddress",
+        "broker.lan.port":"CfgWc2LanBrokerPort",
+        "broker.lan.world.address":"CfgWc2LanWorldAddress",
         "broker.world.capacity":"CfgWc2WorldCapacity",
         "broker.world.mode":"CfgWc2WorldMode",
         "game.max.connection":"CfgWc2MaxConnections",

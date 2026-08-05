@@ -6,6 +6,7 @@ import ctypes
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -20,6 +21,8 @@ LOCAL_MACHINE_PROVIDER = "windows-dpapi-local-machine"
 MAX_STORE_BYTES = 1_048_576
 MAX_SETTINGS_BYTES = 65_536
 STOP_TIMEOUT_SECONDS = 30
+LAN_BROKER_DIRECTORY = "BrokerServerLAN"
+BROKER_RUNTIME_FILES = ("BrokerServer.exe", "MySql.Data.dll", "Newtonsoft.Json.dll")
 DEFAULT_LEGACY_SETTINGS = {
     "game.item.seal": "30",
     "game.item.enchant.1_4": "60",
@@ -169,13 +172,42 @@ def mysql_projection(credentials: dict[str, str], host: str, port: int, database
     return projection
 
 
+def ensure_lan_broker_runtime(server_root: Path) -> Path:
+    """Create the isolated LAN Broker runtime without duplicating game state.
+
+    The native Broker loads its configuration relative to its working directory.
+    A small sibling runtime gives the LAN Broker its own port and advertised
+    endpoint while both Broker processes continue to use the same database and
+    the one GameServer process.
+    """
+    source = server_root / "BrokerServer"
+    target = server_root / LAN_BROKER_DIRECTORY
+    target.mkdir(parents=True, exist_ok=True)
+    for filename in BROKER_RUNTIME_FILES:
+        source_file = source / filename
+        target_file = target / filename
+        if not source_file.is_file():
+            raise LegacyGunBoundLaunchError(f"Required Broker runtime file is unavailable: {source_file}")
+        if not target_file.is_file() or source_file.stat().st_size != target_file.stat().st_size:
+            shutil.copy2(source_file, target_file)
+    return target
+
+
 def project_runtime_configs(
     server_root: Path, credentials: dict[str, str], database_host: str, database_port: int, database_name: str
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     settings = {**DEFAULT_LEGACY_SETTINGS, **load_properties(server_root / "iris-legacy-settings.properties")}
     broker_port = required_int(settings, "broker.port", 1, 65535)
+    lan_broker_port = required_int(settings, "broker.lan.port", 1, 65535)
     game_port = required_int(settings, "game.port", 1, 65535)
+    if len({broker_port, lan_broker_port, game_port}) != 3:
+        raise LegacyGunBoundLaunchError("The external Broker, LAN Broker, and Game Server ports must be distinct")
     broker = load_json_template(server_root / "BrokerServer" / "Config.json")
+    lan_broker_root = ensure_lan_broker_runtime(server_root)
+    lan_config_path = lan_broker_root / "Config.json"
+    if not lan_config_path.is_file():
+        write_json_atomic(lan_config_path, broker)
+    lan_broker = load_json_template(lan_config_path)
     game = load_json_template(server_root / "GameServer" / "Config" / "Config.json")
     broker["Mysql"] = mysql_projection(credentials, database_host, database_port, database_name, ("GunBoundDB", "AdminDB"))
     broker["Port"] = broker_port
@@ -185,6 +217,19 @@ def project_runtime_configs(
             "Name": required_text(settings, "broker.world.name", 64),
             "Description": required_text(settings, "broker.world.description", 128),
             "Ip": required_text(settings, "broker.world.address", 253),
+            "Port": game_port,
+            "MaxConnection": required_int(settings, "broker.world.capacity", 1, 5000),
+            "Mode": required_int(settings, "broker.world.mode", 0, 255),
+        }
+    ]
+    lan_broker["Mysql"] = mysql_projection(credentials, database_host, database_port, database_name, ("GunBoundDB", "AdminDB"))
+    lan_broker["Port"] = lan_broker_port
+    lan_broker["LogPackets"] = broker["LogPackets"]
+    lan_broker["Servers"] = [
+        {
+            "Name": required_text(settings, "broker.world.name", 64),
+            "Description": required_text(settings, "broker.world.description", 128),
+            "Ip": required_text(settings, "broker.lan.world.address", 253),
             "Port": game_port,
             "MaxConnection": required_int(settings, "broker.world.capacity", 1, 5000),
             "Mode": required_int(settings, "broker.world.mode", 0, 255),
@@ -234,8 +279,9 @@ def project_runtime_configs(
     game["EnableItem2"] = settings.get("game.enable_item2", "false").casefold() == "true"
     game["LogPackets"] = settings.get("diagnostics.log_packets", "false").casefold() == "true"
     write_json_atomic(server_root / "BrokerServer" / "Config.json", broker)
+    write_json_atomic(lan_config_path, lan_broker)
     write_json_atomic(server_root / "GameServer" / "Config" / "Config.json", game)
-    return broker_port, game_port
+    return broker_port, lan_broker_port, game_port
 
 
 def sanitize_runtime_configs(server_root: Path) -> None:
@@ -248,6 +294,7 @@ def sanitize_runtime_configs(server_root: Path) -> None:
     """
     for config_path in (
         server_root / "BrokerServer" / "Config.json",
+        server_root / LAN_BROKER_DIRECTORY / "Config.json",
         server_root / "GameServer" / "Config" / "Config.json",
     ):
         template_path = config_path.with_name(f"{config_path.stem}.iris-template.json")
@@ -263,13 +310,19 @@ def sanitize_runtime_configs(server_root: Path) -> None:
         write_json_atomic(config_path, template)
 
 
-def start_pair(server_root: Path) -> tuple[subprocess.Popen[bytes], subprocess.Popen[bytes]]:
+def start_services(server_root: Path) -> tuple[subprocess.Popen[bytes], subprocess.Popen[bytes], subprocess.Popen[bytes]]:
     broker = subprocess.Popen([str(server_root / "BrokerServer" / "BrokerServer.exe")], cwd=server_root / "BrokerServer")
     time.sleep(0.75)
     if broker.poll() is not None:
-        raise LegacyGunBoundLaunchError(f"BrokerServer exited during startup ({broker.returncode})")
+        raise LegacyGunBoundLaunchError(f"External BrokerServer exited during startup ({broker.returncode})")
+    lan_broker_root = server_root / LAN_BROKER_DIRECTORY
+    lan_broker = subprocess.Popen([str(lan_broker_root / "BrokerServer.exe")], cwd=lan_broker_root)
+    time.sleep(0.75)
+    if lan_broker.poll() is not None:
+        stop_process(broker)
+        raise LegacyGunBoundLaunchError(f"LAN BrokerServer exited during startup ({lan_broker.returncode})")
     game = subprocess.Popen([str(server_root / "GameServer" / "GameServer.exe")], cwd=server_root / "GameServer")
-    return broker, game
+    return broker, lan_broker, game
 
 
 def stop_process(process: subprocess.Popen[bytes]) -> None:
@@ -284,7 +337,7 @@ def stop_process(process: subprocess.Popen[bytes]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Launch the legacy WC2 v894 GunBound service pair with Iris SQL credentials.")
+    parser = argparse.ArgumentParser(description="Launch the legacy WC2 v894 GunBound services with Iris SQL credentials.")
     parser.add_argument("--server-root", type=Path, default=Path(r"D:\Gunbound"))
     parser.add_argument("--credential-store", type=Path, required=True)
     parser.add_argument("--database-host", default="127.0.0.1")
@@ -309,18 +362,20 @@ def main() -> int:
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise LegacyGunBoundLaunchError(f"Required WC2 runtime files are unavailable: {missing}")
+    ensure_lan_broker_runtime(server_root)
     if args.sanitize:
         sanitize_runtime_configs(server_root)
         print(json.dumps({"ok": True, "sanitized": True, "password_disclosed": False}))
         return 0
     credentials = load_iris_database_credentials(args.credential_store.resolve())
-    broker_port, game_port = project_runtime_configs(
+    broker_port, lan_broker_port, game_port = project_runtime_configs(
         server_root, credentials, args.database_host.strip(), args.database_port, args.database_name.strip()
     )
     if args.check:
-        print(json.dumps({"ok": True, "broker_port": broker_port, "game_port": game_port, "password_disclosed": False}))
+        sanitize_runtime_configs(server_root)
+        print(json.dumps({"ok": True, "external_broker_port": broker_port, "lan_broker_port": lan_broker_port, "game_port": game_port, "password_disclosed": False}))
         return 0
-    processes: tuple[subprocess.Popen[bytes], subprocess.Popen[bytes]] | None = None
+    processes: tuple[subprocess.Popen[bytes], subprocess.Popen[bytes], subprocess.Popen[bytes]] | None = None
     stopping = False
 
     def handle_stop(_signum: int, _frame: Any) -> None:
@@ -330,16 +385,18 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_stop)
     signal.signal(signal.SIGTERM, handle_stop)
     try:
-        processes = start_pair(server_root)
-        print(f"[legacy-launcher] STARTED broker_pid={processes[0].pid} game_pid={processes[1].pid}", flush=True)
+        processes = start_services(server_root)
+        print(
+            f"[legacy-launcher] STARTED external_broker_pid={processes[0].pid} lan_broker_pid={processes[1].pid} game_pid={processes[2].pid}",
+            flush=True,
+        )
         while not stopping:
-            broker_code = processes[0].poll()
-            game_code = processes[1].poll()
-            if broker_code is not None or game_code is not None:
+            process_codes = [process.poll() for process in processes]
+            if any(code is not None for code in process_codes):
                 # A child exiting, even with code 0, means the legacy server stopped
                 # unexpectedly. Return a non-zero code so the AMP supervisor can
                 # accurately surface the failure and apply its bounded recovery policy.
-                return int((broker_code if broker_code is not None else game_code) or 1)
+                return int(next(code for code in process_codes if code is not None) or 1)
             time.sleep(0.5)
         return 0
     finally:
