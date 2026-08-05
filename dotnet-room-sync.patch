@@ -1,0 +1,63 @@
+diff --git a/Net/GameConnection.cs b/Net/GameConnection.cs
+index bc135f3..518938f 100644
+--- a/Net/GameConnection.cs
++++ b/Net/GameConnection.cs
+@@ -59,7 +59,20 @@ public sealed class GameConnection
+         {
+             await foreach (byte[] bytes in _sendQueue.Reader.ReadAllAsync())
+             {
+-                try { Socket.Send(bytes); }
++                try
++                {
++                    // Socket.Send is allowed to write fewer bytes than requested.
++                    // A partial GunBound frame desynchronizes every packet that
++                    // follows it and commonly leaves the client in PLEASE WAIT.
++                    int sent = 0;
++                    while (sent < bytes.Length)
++                    {
++                        int written = Socket.Send(bytes, sent, bytes.Length - sent, SocketFlags.None);
++                        if (written <= 0)
++                            throw new SocketException((int)SocketError.ConnectionReset);
++                        sent += written;
++                    }
++                }
+                 catch { break; } // dead connection: stop the loop
+             }
+         }
+@@ -100,6 +113,9 @@ public sealed class GameConnection
+             byte[] bytes = packet.ToArray();
+             TxSum += bytes.Length;
+             _sendQueue.Writer.TryWrite(bytes);
++
++            if (command is 0x2121 or 0x3105 or 0x3432)
++                Console.WriteLine($"SEND> 0x{command:X4} payload={data.ReadableBytes}B packet={bytes.Length}B txsum={TxSum}");
+         }
+     }
+ }
+diff --git a/Packets/Readers/Room/RoomCreateReader.cs b/Packets/Readers/Room/RoomCreateReader.cs
+index 9db6105..1667483 100644
+--- a/Packets/Readers/Room/RoomCreateReader.cs
++++ b/Packets/Readers/Room/RoomCreateReader.cs
+@@ -2,6 +2,7 @@ using System.Text;
+ using GunBound.Emulator.Lobby;
+ using GunBound.Emulator.Model.Entities.Game;
+ using GunBound.Emulator.Net;
++using GunBound.Emulator.Packets.Writers;
+ using GunBound.Emulator.Room;
+ using GunBound.Emulator.Room.Model.Enums;
+ 
+@@ -101,6 +102,14 @@ public static class RoomCreateReader
+             PacketBuffer successPayload = WriteCreateRoomSuccess(createdRoom);
+             creator.Connection.SendPacket(OPCODE_CREATE_SUCCESS, successPayload);
+ 
++            // The modern ThorsHammer client needs the creator's own ready-room
++            // synchronization immediately after 0x2121. Without this 0x3105 the
++            // server-side room exists, but the client can remain behind the
++            // modal "PLEASE WAIT" overlay: option changes reach the server while
++            // the Start button never emits 0x3430. Keep both packets on the same
++            // per-connection FIFO so the acknowledgement is always seen first.
++            RoomWriter.WriteRoomUpdate(creator);
++
+             Console.WriteLine("Room '" + title + "' created successfully with ID " + createdRoom.RoomId + "', Mode="
+                 + gameModeEnum.Name);
+ 

@@ -18,9 +18,13 @@ The .NET server is based on the public `Cephas02/Gunbound-Net-public` protocol
 implementation and supports the bundled Thor's Hammer client room workflow.
 Its Iris deployment adds scoped Vault credentials, public-DDNS plus LAN-aware
 endpoint advertisement, configurable ports/capacity, bounded diagnostics, and
-the Iris chat injection contract. The previous Java runtime remains installed
-only as an offline rollback path because it accepts login/lobby traffic from
-the client but does not recognize that client's room-create request.
+the Iris chat injection contract. `dotnet-room-sync.patch` preserves the
+required create-room acknowledgement followed by the creator's own ready-room
+notification (`0x2121` then `0x3105`) and guarantees complete TCP frame sends;
+both are required to keep the paired client out of a permanent `PLEASE WAIT`
+state. The previous Java runtime remains installed only as an offline rollback
+path because it accepts login/lobby traffic from the client but does not
+recognize that client's room-create request.
 
 GunBound lobby and room chat lines are consumed from the AMP Console; no extra
 listener is opened. The single complete case-insensitive `~Iris` token may
