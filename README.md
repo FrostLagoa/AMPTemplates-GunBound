@@ -1,49 +1,44 @@
-# GunBound Thor's Hammer AMP template
+# GunBound World Champion Season 2 v894 AMP template
 
-This package supervises the reviewed GunBound .NET runtime in
-`D:\Gunbound\Server\dotnet-runtime` without copying the game tree into AMP.
-The self-contained `gunbound-launcher.py` reads a host-local Vault containing
-only `IRIS_MYSQL_USER` and `IRIS_MYSQL_PASSWORD`, decrypts those values through
-machine-scoped Windows DPAPI, and injects them only into the child process. The
-AMP identity never receives access to the full Iris checkout or its main Vault.
+This template controls the operator-provided native WC2 v894 server in
+`D:\Gunbound`. It starts the original `BrokerServer.exe` and
+`GameServer.exe` as one supervised application, keeps their output in the AMP
+Console, and verifies the Broker (`8400/TCP`) and Game (`8401/TCP`) ports
+before AMP reports the instance ready.
 
-The foreground supervisor keeps runtime output in the AMP Console and verifies
-Broker `8372/TCP`, Game `8360/TCP`, Buddy `8352/TCP`, and Buddy relay
-`8381/UDP`. It accepts only `status`, the validated Base64 `iris-chat` envelope,
-and lifecycle commands, performs at most three bounded crash-recovery attempts,
-and terminates every supervised descendant on shutdown. The runtime remains
-under AMP's `NETWORK SERVICE` identity.
+## Database compatibility
 
-The .NET server is based on the public `Cephas02/Gunbound-Net-public` protocol
-implementation and supports the bundled Thor's Hammer client room workflow.
-Its Iris deployment adds scoped Vault credentials, public-DDNS plus LAN-aware
-endpoint advertisement, configurable ports/capacity, bounded diagnostics, and
-the Iris chat injection contract. `dotnet-room-sync.patch` preserves the
-required create-room acknowledgement followed by the creator's own ready-room
-notification (`0x2121` then `0x3105`) and guarantees complete TCP frame sends;
-both are required to keep the paired client out of a permanent `PLEASE WAIT`
-state. The previous Java runtime remains installed only as an offline rollback
-path because it accepts login/lobby traffic from the client but does not
-recognize that client's room-create request.
+The native binaries ship with legacy MySQL client libraries that are not
+compatible with the TLS negotiation of Laragon's MySQL 8.4. The template uses a
+separate official MySQL 5.7.44 compatibility instance installed under Laragon,
+bound only to `127.0.0.1:3303`. It owns only the `gunbound` schema and uses the
+same scoped Iris SQL identity as every other game integration. It neither
+changes nor exposes the MySQL 8.4 service used by Iris and the other games.
 
-GunBound lobby and room chat lines are consumed from the AMP Console; no extra
-listener is opened. The single complete case-insensitive `~Iris` token may
-appear anywhere in a player message. Replies are restricted to a 60-character
-client-safe envelope and always begin with `Iris: `.
+The AMP supervisor starts that loopback-only companion when necessary, checks
+that it remains available, and starts the native Broker/Game pair only after
+the database is ready. The companion database is not a public game port.
 
-The existing `gunbound` Laragon schema is retained. The deployment adds only
-the compatibility columns and auxiliary tables required by the .NET runtime.
-GunBound's legacy authentication protocol requires the player password itself
-to remain available to the game server and therefore cannot use a one-way hash.
-Passwords must be unique to this game, 6-12 characters, and never reused.
+The scoped credential store contains machine-DPAPI-protected values only. The
+launcher projects the required native JSON database block immediately before
+the executables start and restores credential-free templates as soon as they
+exit. Neither the template repository nor AMP configuration contains database
+passwords.
 
-`gunbound-banner.jpg` is a 468 x 219 adaptation of the operator-provided Thor's
-Hammer artwork that keeps the complete logo visible. The public template
-repository contains no client/server binaries, database contents, or secrets.
+## Configuration
 
-AMP config version 7 exposes every non-secret setting supported by this runtime:
-public/LAN/bind endpoints, the four service ports, world name/description,
-player slots, P2P mode, packet diagnostics, per-IP session cap, spawn and shop
-compatibility controls, tunnel duplicate suppression, anti-cheat reward caps,
-and event controls. Saves write through the verified `runtime-config` junction
-to `D:\Gunbound\Server\config\db.properties`.
+The `Gunbound` gamepad page exposes every non-secret value represented by the
+native Broker/Game configuration: public world identity and capacity, client
+compatibility, connection limits, rewards, grade/function restrictions, Item2,
+item seal/enchant rules, channel/room messages, classic mode, native event
+flags, cash-event parameters and packet diagnostics. Values are written to the
+runtime settings file and applied on the next AMP start/restart.
+
+AMP lifecycle commands are the supported way to start, stop and restart the
+server. Native WC2 binaries do not expose a safe console protocol for Iris
+in-game chat injection; the template deliberately reports that capability as
+unavailable rather than accepting a message it cannot deliver.
+
+`gunbound-banner.jpg` is an operator-provided Season 2 banner adapted to AMP's
+instance-card dimensions. This repository contains no game/client binaries,
+database dumps or secret material.

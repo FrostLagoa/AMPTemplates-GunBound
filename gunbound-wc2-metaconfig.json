@@ -7,8 +7,10 @@
     "Subsections": [
       {"Heading":"$root","SettingMappings":{
         "broker.world.name":"CfgWc2WorldName",
+        "broker.world.description":"CfgWc2WorldDescription",
         "broker.world.address":"CfgWc2WorldAddress",
         "broker.world.capacity":"CfgWc2WorldCapacity",
+        "broker.world.mode":"CfgWc2WorldMode",
         "game.max.connection":"CfgWc2MaxConnections",
         "client.version.first":"CfgWc2VersionFirst",
         "client.checksum":"CfgWc2Checksum",
@@ -18,9 +20,23 @@
         "game.grade.last":"CfgWc2GradeLast",
         "game.function.restriction":"CfgWc2FunctionRestriction",
         "game.enable_item2":"CfgWc2EnableItem2",
+        "game.channel.message":"CfgWc2ChannelMessage",
+        "game.room.message":"CfgWc2RoomMessage",
+        "game.server.classic":"CfgWc2ServerClassic",
+        "game.item.seal":"CfgWc2ItemSeal",
+        "game.item.enchant.1_4":"CfgWc2Enchant1_4",
+        "game.item.enchant.5_8":"CfgWc2Enchant5_8",
+        "game.item.enchant.9_12":"CfgWc2Enchant9_12",
+        "game.item.enchant.13_16":"CfgWc2Enchant13_16",
+        "game.item.enchant.17_18":"CfgWc2Enchant17_18",
+        "game.item.enchant.19_20":"CfgWc2Enchant19_20",
+        "game.item.enchant.21_30":"CfgWc2Enchant21_30",
+        "event.cash.enabled":"CfgWc2CashEventEnabled",
+        "event.cash.win_reward":"CfgWc2CashEventWinReward",
+        "event.cash.lose_reward":"CfgWc2CashEventLoseReward",
+        "event.cash.expire":"CfgWc2CashEventExpire",
         "diagnostics.log_packets":"CfgWc2LogPackets"
       }}
     ]
   }
 ]
-

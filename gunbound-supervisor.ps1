@@ -82,13 +82,14 @@ function Ensure-CompatibilityDatabase {
 
 function Ensure-LegacySettings {
     param([string]$Path)
-    if (Test-Path -LiteralPath $Path -PathType Leaf) { return }
     $defaults = @(
         "# Iris-managed, non-secret GunBound WC2 v894 settings.",
         "broker.port=$BrokerPort",
         "broker.world.name=Kallidos Gunbound",
+        "broker.world.description=Welcome to the Server!",
         "broker.world.address=server.kallidos.com",
         "broker.world.capacity=500",
+        "broker.world.mode=0",
         "game.port=$GamePort",
         "game.max.connection=500",
         "game.golf.factor=100",
@@ -97,6 +98,9 @@ function Ensure-LegacySettings {
         "game.grade.last=19",
         "game.function.restriction=1040384",
         "game.enable_item2=false",
+        "game.channel.message=Welcome!",
+        "game.room.message=Welcome!",
+        "game.server.classic=0",
         "game.item.seal=30",
         "game.item.enchant.1_4=60",
         "game.item.enchant.5_8=50",
@@ -111,9 +115,24 @@ function Ensure-LegacySettings {
         "event.actprop.1=0",
         "event.actprop.2=0",
         "event.actprop.3=0",
+        "event.cash.win_reward=250",
+        "event.cash.lose_reward=100",
+        "event.cash.enabled=false",
+        "event.cash.expire=0",
         "diagnostics.log_packets=false"
     )
-    [IO.File]::WriteAllLines($Path, $defaults, [Text.UTF8Encoding]::new($false))
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        [IO.File]::WriteAllLines($Path, $defaults, [Text.UTF8Encoding]::new($false))
+        return
+    }
+    $lines = [Collections.Generic.List[string]]([IO.File]::ReadAllLines($Path))
+    foreach ($default in $defaults) {
+        if ($default.StartsWith("#") -or $default -notmatch "=") { continue }
+        $key = $default.Split("=", 2)[0]
+        $pattern = "^\s*" + [Regex]::Escape($key) + "\s*="
+        if (-not ($lines | Where-Object { $_ -match $pattern })) { $lines.Add($default) }
+    }
+    [IO.File]::WriteAllLines($Path, $lines, [Text.UTF8Encoding]::new($false))
 }
 
 function Set-SettingValue {
@@ -238,12 +257,6 @@ try {
             if (-not (Test-TcpPort -Port $DatabasePort)) {
                 throw "GunBound compatibility MySQL is no longer listening on TCP port $DatabasePort"
             }
-            if ([Console]::KeyAvailable) {
-                $command = [Console]::ReadLine()
-                if ($command -eq "ampstop") { $script:stopping = $true; break }
-                if ($command -eq "status") { Write-GunBoundStatus }
-                if ($command -like "iris-chat *") { [Console]::WriteLine("[supervisor] Iris chat injection is unavailable for the native WC2 binary") }
-            }
             Start-Sleep -Milliseconds 100
         }
         Drain-GunBoundOutput
@@ -262,4 +275,3 @@ finally {
     }
     [Console]::WriteLine("[supervisor] STOPPED")
 }
-

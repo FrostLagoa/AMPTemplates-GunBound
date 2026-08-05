@@ -183,9 +183,11 @@ def project_runtime_configs(
     broker["Servers"] = [
         {
             "Name": required_text(settings, "broker.world.name", 64),
+            "Description": required_text(settings, "broker.world.description", 128),
             "Ip": required_text(settings, "broker.world.address", 253),
             "Port": game_port,
             "MaxConnection": required_int(settings, "broker.world.capacity", 1, 5000),
+            "Mode": required_int(settings, "broker.world.mode", 0, 255),
         }
     ]
     game["Mysql"] = mysql_projection(
@@ -220,6 +222,15 @@ def project_runtime_configs(
     }
     for config_key, setting_key in numeric_map.items():
         game[config_key] = required_int(settings, setting_key)
+    game["Channel"] = required_text(settings, "game.channel.message", 128)
+    game["Room"] = required_text(settings, "game.room.message", 128)
+    game["ServerClassic"] = required_int(settings, "game.server.classic", 0, 1)
+    game["CashEvent"] = {
+        "WinReward": required_int(settings, "event.cash.win_reward", 0, 2_147_483_647),
+        "LoseReward": required_int(settings, "event.cash.lose_reward", 0, 2_147_483_647),
+        "Enable": settings.get("event.cash.enabled", "false").casefold() == "true",
+        "Expire": required_int(settings, "event.cash.expire", 0, 2_147_483_647),
+    }
     game["EnableItem2"] = settings.get("game.enable_item2", "false").casefold() == "true"
     game["LogPackets"] = settings.get("diagnostics.log_packets", "false").casefold() == "true"
     write_json_atomic(server_root / "BrokerServer" / "Config.json", broker)
