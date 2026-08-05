@@ -124,6 +124,15 @@ def required_int(values: dict[str, str], key: str, minimum: int = 0, maximum: in
     return value
 
 
+def required_binary_int(values: dict[str, str], key: str) -> int:
+    value = str(values.get(key) or "").strip().casefold()
+    if value in {"true", "yes", "on", "1"}:
+        return 1
+    if value in {"false", "no", "off", "0"}:
+        return 0
+    raise LegacyGunBoundLaunchError(f"The WC2 setting {key} must be a boolean or 0/1 integer")
+
+
 def required_text(values: dict[str, str], key: str, maximum: int = 128) -> str:
     value = str(values.get(key) or "").strip()
     if not value or len(value) > maximum or any(character in value for character in "\r\n\x00"):
@@ -269,7 +278,7 @@ def project_runtime_configs(
         game[config_key] = required_int(settings, setting_key)
     game["Channel"] = required_text(settings, "game.channel.message", 128)
     game["Room"] = required_text(settings, "game.room.message", 128)
-    game["ServerClassic"] = required_int(settings, "game.server.classic", 0, 1)
+    game["ServerClassic"] = required_binary_int(settings, "game.server.classic")
     game["CashEvent"] = {
         "WinReward": required_int(settings, "event.cash.win_reward", 0, 2_147_483_647),
         "LoseReward": required_int(settings, "event.cash.lose_reward", 0, 2_147_483_647),
