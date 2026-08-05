@@ -1075,3 +1075,32 @@ index 95610a3..61be393 100644
      <logger name="com.zaxxer.hikari" level="WARN" />
  
      <root level="INFO">
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/writers/RoomWriter.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/writers/RoomWriter.java
+index 92227cb..eb9f2c3 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/writers/RoomWriter.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/writers/RoomWriter.java
+@@ -132,17 +132,13 @@ public final class RoomWriter {
+ 
+ 			buffer.writeByte(room.getMapId());
+ 			buffer.writeIntLE(room.getGameSettings());
+-			// buffer.writeBytes(new byte[] { 00 });// tem pu talvez?
+-			buffer.writeByte(room.getRoomMaster().getIsPowerUser());// tem pu
+ 			buffer.writeByte(room.getPlayerCount());
+ 			buffer.writeByte(room.getCapacity());
+ 			buffer.writeByte(room.isGameStarted() ? 1 : 0); // Estado do jogo (1=jogando, 0=esperando)
+-			// buffer.writeBytes(new byte[] {00});
+ 			buffer.writeByte(room.isPrivate() ? 1 : 0); // Trancada (1=senha, 0=aberta)
+ 			System.out.println("[DEBUG] writeRoomList sala privada?: " + room.isPrivate());
+ 
+ 		}
+-		buffer.writeBytes(new byte[] { 00 });// what? i dont know is padding?
+ 		return buffer;
+ 	}
+ 
+@@ -241,4 +237,4 @@ public final class RoomWriter {
+ 
+ 		return buffer;
+ 	}
+-}
+\ No newline at end of file
++}
