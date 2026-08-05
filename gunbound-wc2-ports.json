@@ -1,0 +1,16 @@
+[
+  {
+    "Protocol": "TCP",
+    "Port": 8400,
+    "Ref": "ApplicationPort1",
+    "Name": "Broker service",
+    "Description": "Public WC2 server-directory and world-selection service"
+  },
+  {
+    "Protocol": "TCP",
+    "Port": 8401,
+    "Ref": "ApplicationPort2",
+    "Name": "Game service",
+    "Description": "Public WC2 game protocol service"
+  }
+]

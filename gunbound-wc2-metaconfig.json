@@ -1,0 +1,25 @@
+[
+  {
+    "ConfigFile": "runtime-config/iris-legacy-settings.properties",
+    "ConfigType": "kvp",
+    "ConfigFormat": "{0}={1}",
+    "ConfigFormatRegex": "^\\s*(?<key>[^#!\\s][^=]*?)\\s*=\\s*(?<value>.*?)\\s*$",
+    "Subsections": [
+      {"Heading":"$root","SettingMappings":{
+        "broker.world.name":"CfgWc2WorldName",
+        "broker.world.address":"CfgWc2WorldAddress",
+        "broker.world.capacity":"CfgWc2WorldCapacity",
+        "game.max.connection":"CfgWc2MaxConnections",
+        "client.version.first":"CfgWc2VersionFirst",
+        "client.checksum":"CfgWc2Checksum",
+        "game.golf.factor":"CfgWc2GolfFactor",
+        "game.score.factor":"CfgWc2ScoreFactor",
+        "game.grade.first":"CfgWc2GradeFirst",
+        "game.grade.last":"CfgWc2GradeLast",
+        "game.function.restriction":"CfgWc2FunctionRestriction",
+        "game.enable_item2":"CfgWc2EnableItem2",
+        "diagnostics.log_packets":"CfgWc2LogPackets"
+      }}
+    ]
+  }
+]

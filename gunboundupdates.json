@@ -10,11 +10,11 @@
     "SkipOnFailure": false
   },
   {
-    "UpdateStageName": "Install scoped-Vault launcher",
+    "UpdateStageName": "Install WC2 scoped-Vault launcher",
     "UpdateSourcePlatform": "Windows",
     "UpdateSource": "FetchURL",
-    "UpdateSourceData": "https://raw.githubusercontent.com/FrostLagoa/AMPTemplates-GunBound/main/gunbound-launcher.py",
-    "UpdateSourceArgs": "gunbound-launcher.py",
+    "UpdateSourceData": "https://raw.githubusercontent.com/FrostLagoa/AMPTemplates-GunBound/main/legacy-gunbound-launcher.py",
+    "UpdateSourceArgs": "legacy-gunbound-launcher.py",
     "UpdateSourceTarget": "{{$FullRootDir}}",
     "OverwriteExistingFiles": true,
     "SkipOnFailure": false
