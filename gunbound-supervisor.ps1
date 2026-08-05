@@ -151,7 +151,7 @@ function Set-SettingValue {
 
 function Get-SettingInteger {
     param([string]$Path, [string]$Key, [int]$Minimum = 1, [int]$Maximum = 65535)
-    $match = [IO.File]::ReadAllLines($Path) | Where-Object { $_ -match ("^\\s*" + [Regex]::Escape($Key) + "\\s*=") } | Select-Object -First 1
+    $match = [IO.File]::ReadAllLines($Path) | Where-Object { $_ -match ("^\s*" + [Regex]::Escape($Key) + "\s*=") } | Select-Object -First 1
     if ($null -eq $match) { throw "Required setting $Key is missing" }
     $valueText = ($match -split "=", 2)[1].Trim()
     $value = 0
