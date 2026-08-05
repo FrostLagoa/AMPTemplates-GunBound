@@ -442,6 +442,106 @@ index dc6c07e..beffaef 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/src/main/java/br/com/gunbound/emulator/buddy/db/services/impl/BuddyAuthServiceImpl.java b/src/main/java/br/com/gunbound/emulator/buddy/db/services/impl/BuddyAuthServiceImpl.java
+index e18120c..cc25a95 100644
+--- a/src/main/java/br/com/gunbound/emulator/buddy/db/services/impl/BuddyAuthServiceImpl.java
++++ b/src/main/java/br/com/gunbound/emulator/buddy/db/services/impl/BuddyAuthServiceImpl.java
+@@ -31,7 +31,8 @@ public class BuddyAuthServiceImpl implements BuddyAuthService {
+         }
+ 
+         // 1. Busca o usuário no banco de dados.
+-        BuddyUserDTO user = userDAO.getUserByUserId(username);
++        String protocolUsername = username.trim();
++        BuddyUserDTO user = userDAO.getUserByUserId(protocolUsername);
+         if (user == null) {
+             throw new BuddyAuthException("Usuário '" + username + "' não encontrado.");
+         }
+@@ -40,8 +41,8 @@ public class BuddyAuthServiceImpl implements BuddyAuthService {
+         try {
+             byte[] passwordDecryptedPayload = BuddyCipher.gunboundDynamicDecrypt(
+                 encryptedBlock,
+-                user.getUserId(),
+-                user.getPassword(), // Usa a senha do DB para gerar a chave de descriptografia
++                protocolUsername,
++                user.getPassword(),
+                 authToken,
+                 0x0000
+             );
+@@ -49,15 +50,17 @@ public class BuddyAuthServiceImpl implements BuddyAuthService {
+             String receivedPassword = new String(passwordDecryptedPayload, 4, 20, StandardCharsets.ISO_8859_1).trim();
+ 
+             if (!receivedPassword.equals(user.getPassword())) {
+-                throw new BuddyAuthException("Senha incorreta para o usuário '" + username + "'.");
++                throw new BuddyAuthException("Credenciais inválidas.");
+             }
+ 
++        } catch (BuddyAuthException e) {
++            throw e;
+         } catch (Exception e) {
+-            // Se qualquer erro de descriptografia ocorrer, a autenticação falha.
+-            throw new BuddyAuthException("Falha na descriptografia da senha.", e);
++            throw new BuddyAuthException("Credenciais inválidas.", e);
+         }
+ 
+-        // 3. Se tudo estiver correto, retorna os dados do usuário.
++        // Keep the exact case used by the client for subsequent dynamic packets.
++        user.setUserId(protocolUsername);
+         System.out.println("Login (com token) bem-sucedido para o usuário: " + username);
+         return user;
+     }
+diff --git a/src/main/java/br/com/gunbound/emulator/buddy/entities/dto/BuddyUserDTO.java b/src/main/java/br/com/gunbound/emulator/buddy/entities/dto/BuddyUserDTO.java
+index dc04be7..41d8c66 100644
+--- a/src/main/java/br/com/gunbound/emulator/buddy/entities/dto/BuddyUserDTO.java
++++ b/src/main/java/br/com/gunbound/emulator/buddy/entities/dto/BuddyUserDTO.java
+@@ -28,7 +28,7 @@ public class BuddyUserDTO {
+ 	}
+ 
+ 	public String getUserId() {
+-		return userId.toLowerCase();
++		return userId;
+ 	}
+ 
+ 	public void setUserId(String userId) {
+@@ -52,7 +52,7 @@ public class BuddyUserDTO {
+ 	}
+ 
+ 	public String getNickname() {
+-		if (nickname.isEmpty() || nickname.isBlank() || nickname == null) {
++		if (nickname == null || nickname.isBlank()) {
+ 			return userId;
+ 		}
+ 		return nickname;
+diff --git a/src/main/java/br/com/gunbound/emulator/buddy/packet/readers/LoginPacketReader.java b/src/main/java/br/com/gunbound/emulator/buddy/packet/readers/LoginPacketReader.java
+index ac6653f..49cc16e 100644
+--- a/src/main/java/br/com/gunbound/emulator/buddy/packet/readers/LoginPacketReader.java
++++ b/src/main/java/br/com/gunbound/emulator/buddy/packet/readers/LoginPacketReader.java
+@@ -89,9 +89,6 @@ public class LoginPacketReader {
+ 			byte[] authDword = new byte[4];
+ 			part1Buffer.readBytes(authDword); // Lê os próximos 4 bytes
+ 
+-			System.out.println("Parte 1 OK. UserID (hex): " + Utils.bytesToHex(userIdBytes) + ", AuthDword: "
+-					+ Utils.bytesToHex(authDword));
+-
+ 			user = new String(userIdBytes, StandardCharsets.ISO_8859_1).trim();
+ 
+ 			BuddyUserDTO authenticatedUser = authService.loginWithToken(user, part2_encrypted, authDword);
+@@ -149,9 +146,6 @@ public class LoginPacketReader {
+ 
+ 		System.out.println("Sessão do jogador " + session.getUser().getNickname() + " autenticada com sucesso no BuddyServer.");
+ 
+-		String pwd = new String(passwordContainer, StandardCharsets.UTF_8);
+-		System.out.println("UserId: " + session.getUser().getUserId() + " password:" + pwd);
+-
+ 		// so vai setar o usuario se o login senha e auth token baterem
+ 		// session.setUser(queriedUser);
+ 
+@@ -264,4 +258,4 @@ public class LoginPacketReader {
+ 		});
+ 
+ 	}
+-}
+\ No newline at end of file
++}
 diff --git a/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java b/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java
 index fc86a58..f510864 100644
 --- a/src/main/java/br/com/gunbound/emulator/buddy/udp/BuddyUdpService.java
@@ -521,6 +621,32 @@ index fc86a58..f510864 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/src/main/java/br/com/gunbound/emulator/buddy/utils/BuddyCipher.java b/src/main/java/br/com/gunbound/emulator/buddy/utils/BuddyCipher.java
+index df9c296..f0aa585 100644
+--- a/src/main/java/br/com/gunbound/emulator/buddy/utils/BuddyCipher.java
++++ b/src/main/java/br/com/gunbound/emulator/buddy/utils/BuddyCipher.java
+@@ -100,13 +100,7 @@ public final class BuddyCipher {
+ 				currentBlockCommand |= (raw[i] & 0xFF) << (internal128BitIndex * 8);
+ 				if (internal128BitIndex == 3) {
+ 					if (currentBlockCommand != packetCommand) {
+-						System.err.println("gunbound_dynamic_decrypt: command checksum mismatch (Expected: "
+-								+ String.format("0x%08X", packetCommand) + ", Got: "
+-								+ String.format("0x%08X", currentBlockCommand) + ")");
+-						
+-						System.err.println("User:"+ username + " | " + "pw:" + password + " | " + "authToken:" + Utils.bytesToHex(authToken) + " | ");
+-						// Não retorna aqui para processar o resto do pacote, mas você pode querer
+-						// desconectar o cliente.
++						throw new BadPaddingException("Dynamic packet checksum mismatch.");
+ 					}
+ 					currentBlockCommand = 0; // Reseta para o próximo bloco.
+ 				}
+@@ -352,4 +346,4 @@ public final class BuddyCipher {
+ 
+ 	private BuddyCipher() {//construtor privado (boa pratica)
+ 	}
+-}
+\ No newline at end of file
++}
 diff --git a/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java b/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java
 index 473b039..49ad0ea 100644
 --- a/src/main/java/br/com/gunbound/emulator/db/DatabaseManager.java
@@ -572,6 +698,75 @@ index 473b039..49ad0ea 100644
  
  	/*private static Properties loadProperties() {
  		String caminhoDbProperties = "config/db.properties"; // Caminho padrão
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/AuthReader.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/AuthReader.java
+index 4af99a0..deb48e8 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/AuthReader.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/AuthReader.java
+@@ -1,7 +1,5 @@
+ package br.com.gunbound.emulator.gameserver.packets.readers;
+ 
+-import java.util.Arrays;
+-
+ import br.com.gunbound.emulator.gameserver.handlers.GameAttributes;
+ import br.com.gunbound.emulator.utils.AuthTokenUtils;
+ import br.com.gunbound.emulator.utils.PacketUtils;
+@@ -35,14 +33,11 @@ public class AuthReader {
+ 		
+ 		
+ 
+-		System.out.println("Token de 4 bytes gerado (positivo): " + Arrays.toString(authToken));
+-
+ 		ByteBuf responsePayload = Unpooled.buffer();
+ 		responsePayload.writeBytes(authToken); // Bytes desconhecidos
+ 
+ 		ByteBuf successPacket = PacketUtils.generatePacket(currentTxSum, 0x1001, responsePayload);
+ 		ctx.writeAndFlush(successPacket);
+-		System.out.println("Token Test:" + Utils.bytesToHex(authToken));
+ 		responsePayload.release(); // Libere o payload após o uso (EH BOA PRATICA CHAPA)
+ 		System.out.println("GS: Resposta de handshake 0x1001 enviada.");
+ 
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/LoginReader.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/LoginReader.java
+index 5db320c..60b3804 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/LoginReader.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/LoginReader.java
+@@ -128,7 +128,7 @@ public class LoginReader {
+ 		} else if (cause instanceof AuthenticationException) {
+ 			System.err.println("Falha na autenticação para '" + userId + "': " + cause.getMessage());
+ 			int currentTxSum = ctx.channel().attr(GameAttributes.PACKET_TX_SUM).get();
+-			PacketWriter.sendPlayerAnError(ctx, currentTxSum, LOGIN_RESPONSE, GameError.LOGIN_PROIBIDO.getId());
++			PacketWriter.sendPlayerAnError(ctx, currentTxSum, LOGIN_RESPONSE, GameError.INVALID_CREDENTIALS.getId());
+ 
+ 		} else {
+ 			System.err.println("Erro crítico ao processar login para '" + userId + "': " + cause.getMessage());
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/RoomCreateReader.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/RoomCreateReader.java
+index 464f82e..cdc5d8d 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/RoomCreateReader.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/RoomCreateReader.java
+@@ -83,7 +83,7 @@ public class RoomCreateReader {
+ 				password = "";
+ 
+ 				// Debug para avisar qeu a senha é "zoada"
+-				System.out.println("[DEBUG] Senha invalida: " + new String(passwordBytes, StandardCharsets.ISO_8859_1));
++			System.out.println("[DEBUG] Invalid room password payload.");
+ 			}*/
+ 			// ************************* FIM DO BYPASS DO BUG DA SENHA
+ 			// *************************
+@@ -119,7 +119,7 @@ public class RoomCreateReader {
+ 			 * // Libera o buffer temporário otherData.release();
+ 			 */
+ 
+-			System.out.println("Tentativa de criar sala: Título='" + title + "', Senha='" + password + "', Capacidade="
++		System.out.println("Tentativa de criar sala: Título='" + title + "', Protegida=" + !password.isBlank() + ", Capacidade="
+ 					+ capacity);
+ 
+ 			// 5. Usa o RoomManager para criar a sala
+@@ -184,4 +184,4 @@ public class RoomCreateReader {
+ 		return buffer;
+ 	}
+ 
+-}
+\ No newline at end of file
++}
 diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java b/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java
 index 20bac02..79a876f 100644
 --- a/src/main/java/br/com/gunbound/emulator/gameserver/packets/readers/room/gameplay/GamePlayerResurrectReader.java
@@ -662,6 +857,105 @@ index fed6fde..29ef3a4 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/src/main/java/br/com/gunbound/emulator/gameserver/room/model/enums/GameError.java b/src/main/java/br/com/gunbound/emulator/gameserver/room/model/enums/GameError.java
+index 7c598c8..1175da2 100644
+--- a/src/main/java/br/com/gunbound/emulator/gameserver/room/model/enums/GameError.java
++++ b/src/main/java/br/com/gunbound/emulator/gameserver/room/model/enums/GameError.java
+@@ -8,6 +8,7 @@ import java.util.Map;
+  */
+ public enum GameError {
+ 	WRONG_VERSION(0x0060),
++	INVALID_CREDENTIALS(0x0010),
+     LOGIN_PROIBIDO(0x0030),
+     SHOP_ERROR(0x000004),//Erro usado quando item nao ta na menu/item/chest
+     USER_NOT_FOUND(0x0000), // Valor padrão para modos não reconhecidos
+@@ -42,4 +43,4 @@ public enum GameError {
+     public static GameError fromId(int id) {
+         return BY_ID.getOrDefault(id, UNKNOWN);
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/model/entities/DTO/UserDTO.java b/src/main/java/br/com/gunbound/emulator/model/entities/DTO/UserDTO.java
+index 2728036..48a51af 100644
+--- a/src/main/java/br/com/gunbound/emulator/model/entities/DTO/UserDTO.java
++++ b/src/main/java/br/com/gunbound/emulator/model/entities/DTO/UserDTO.java
+@@ -82,7 +82,7 @@ public class UserDTO {
+ 	}
+ 
+ 	public String getUserId() {
+-		return userId.toLowerCase();
++		return userId;
+ 	}
+ 
+ 	public void setUserId(String userId) {
+@@ -210,7 +210,7 @@ public class UserDTO {
+ 	}
+ 
+ 	public String getNickname() {
+-		if (nickname.isEmpty() || nickname.isBlank() || nickname == null) {
++		if (nickname == null || nickname.isBlank()) {
+ 			return userId;
+ 		}
+ 		return nickname;
+diff --git a/src/main/java/br/com/gunbound/emulator/services/impl/AuthenticationServiceImpl.java b/src/main/java/br/com/gunbound/emulator/services/impl/AuthenticationServiceImpl.java
+index 9d2bec9..6223d41 100644
+--- a/src/main/java/br/com/gunbound/emulator/services/impl/AuthenticationServiceImpl.java
++++ b/src/main/java/br/com/gunbound/emulator/services/impl/AuthenticationServiceImpl.java
+@@ -41,10 +41,11 @@ public class AuthenticationServiceImpl implements AuthenticationService {
+ 			throw new AuthenticationException("AuthToken não pode ser nulo.");
+ 		}
+ 
++		String protocolUsername = username.trim();
+ 		UserDTO user;
+ 
+ 		try {
+-			user = userService.getUserById(username);
++			user = userService.getUserById(protocolUsername);
+ 
+ 		} catch (UserNotFoundException e) {
+ 			throw new AuthenticationException("Usuário '" + username + "' não encontrado.");
+@@ -69,21 +70,25 @@ public class AuthenticationServiceImpl implements AuthenticationService {
+ 		// 2. Tenta descriptografar e validar a senha.
+ 		try {
+ 			byte[] passwordDecryptedPayload = GunBoundCipher.gunboundDynamicDecrypt(encryptedPasswordBlocks,
+-					user.getUserId(), user.getPassword(), // Usa a senha do DB para gerar a chave de descriptografia
++					protocolUsername, user.getPassword(),
+ 					authToken, opcode);
+ 
+ 			String receivedPassword = new String(passwordDecryptedPayload, 0, 12, StandardCharsets.ISO_8859_1).trim();
+ 
+ 			if (!receivedPassword.equals(user.getPassword())) {
+-				throw new AuthenticationException("Senha incorreta para o usuário '" + username + "'.");
++				throw new AuthenticationException("Credenciais inválidas.");
+ 			}
+ 
++		} catch (AuthenticationException e) {
++			throw e;
+ 		} catch (Exception e) {
+-			// Se qualquer erro de descriptografia ocorrer, a autenticação falha.
+-			throw new AuthenticationException("Falha na descriptografia da senha.", e);
++			throw new AuthenticationException("Credenciais inválidas.", e);
+ 		}
+ 
+-		// 3. Se tudo estiver correto, retorna os dados do usuário.
++		// Preserve the exact login spelling used by the client. It is part of the
++		// dynamic protocol key and is therefore case-sensitive even though SQL lookup
++		// is case-insensitive.
++		user.setUserId(protocolUsername);
+ 		System.out.println("Login (com token) bem-sucedido para o usuário: " + username);
+ 		return user;
+ 	}
+@@ -104,7 +109,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
+ 
+ 		if (!(clientVersion >= serverConfig.getGameServerVersionFirst()
+ 				&& clientVersion <= serverConfig.getGameServerVersionLast())) {
+-			throw new VersionException("Versao incorreta.");
++			throw new VersionException("Versao incorreta: cliente=" + clientVersion + ", faixa aceita="
++					+ serverConfig.getGameServerVersionFirst() + "-" + serverConfig.getGameServerVersionLast() + ".");
+ 		}
+ 
+ 		return clientVersion;
 diff --git a/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java b/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java
 index d4925c2..8a21cda 100644
 --- a/src/main/java/br/com/gunbound/emulator/utils/PacketUtils.java
@@ -696,6 +990,32 @@ index d4925c2..8a21cda 100644
 @@ -171,4 +176,4 @@ public class PacketUtils {
  
  		return response;
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/src/main/java/br/com/gunbound/emulator/utils/crypto/GunBoundCipher.java b/src/main/java/br/com/gunbound/emulator/utils/crypto/GunBoundCipher.java
+index 5822215..6c82816 100644
+--- a/src/main/java/br/com/gunbound/emulator/utils/crypto/GunBoundCipher.java
++++ b/src/main/java/br/com/gunbound/emulator/utils/crypto/GunBoundCipher.java
+@@ -100,13 +100,7 @@ public final class GunBoundCipher {
+ 				currentBlockCommand |= (raw[i] & 0xFF) << (internal128BitIndex * 8);
+ 				if (internal128BitIndex == 3) {
+ 					if (currentBlockCommand != packetCommand) {
+-						System.err.println("gunbound_dynamic_decrypt: command checksum mismatch (Expected: "
+-								+ String.format("0x%08X", packetCommand) + ", Got: "
+-								+ String.format("0x%08X", currentBlockCommand) + ")");
+-						
+-						System.err.println("User:"+ username + " | " + "pw:" + password + " | " + "authToken:" + Utils.bytesToHex(authToken) + " | ");
+-						// Não retorna aqui para processar o resto do pacote, mas você pode querer
+-						// desconectar o cliente.
++						throw new BadPaddingException("Dynamic packet checksum mismatch.");
+ 					}
+ 					currentBlockCommand = 0; // Reseta para o próximo bloco.
+ 				}
+@@ -352,4 +346,4 @@ public final class GunBoundCipher {
+ 
+ 	private GunBoundCipher() {//construtor privado (boa pratica)
  	}
 -}
 \ No newline at end of file

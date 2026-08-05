@@ -465,23 +465,23 @@
     "EnumValues": {}
   },
   {
-    "DisplayName": "Gameserver Versionfirst",
+    "DisplayName": "Minimum client version",
     "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
-    "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
+    "Description": "Lowest GunBound protocol version accepted at login. The bundled modern Thor's Hammer client reports version 5. A server restart is required.",
     "Keywords": "gameserver,versionfirst",
     "FieldName": "CfgGunboundConfigConfigPropertiesGameserverVersionfirst",
     "InputType": "number",
     "ParamFieldName": "CfgGunboundConfigConfigPropertiesGameserverVersionfirst",
     "IncludeInCommandLine": false,
-    "DefaultValue": "100",
+    "DefaultValue": "5",
     "EnumValues": {}
   },
   {
-    "DisplayName": "Gameserver Versionlast",
+    "DisplayName": "Maximum client version",
     "Category": "Gunbound:gamepad",
     "Subcategory": "Game server:gamepad:10",
-    "Description": "Persisted in config/config.properties. The server may require a restart before it takes effect.",
+    "Description": "Highest GunBound protocol version accepted at login. Keep this paired with the minimum version and restart the server after changing it.",
     "Keywords": "gameserver,versionlast",
     "FieldName": "CfgGunboundConfigConfigPropertiesGameserverVersionlast",
     "InputType": "number",
