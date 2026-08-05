@@ -5,7 +5,6 @@ import base64
 import ctypes
 import json
 import os
-import shutil
 import subprocess
 import sys
 from ctypes import wintypes
@@ -15,7 +14,7 @@ from typing import Any
 
 DEFAULT_SERVER_ROOT = Path(r"D:\Gunbound\Server")
 DEFAULT_CREDENTIAL_STORE = DEFAULT_SERVER_ROOT / "config" / "iris-sql-vault.local.json"
-DEFAULT_JAR_NAME = "GunBoundJavaEmulator-1.0-SNAPSHOT-jar-with-dependencies.jar"
+DEFAULT_RUNTIME_NAME = "GunBound.Emulator.exe"
 IRIS_MYSQL_USER_KEY = "IRIS_MYSQL_USER"
 IRIS_MYSQL_PASSWORD_KEY = "IRIS_MYSQL_PASSWORD"  # pragma: allowlist secret
 LOCAL_MACHINE_PROVIDER = "windows-dpapi-local-machine"
@@ -89,17 +88,13 @@ def load_iris_database_credentials(path: Path) -> dict[str, str]:
     return credentials
 
 
-def resolve_runtime(server_root: Path, java_override: str = "") -> dict[str, Path]:
-    jar = server_root / "target" / DEFAULT_JAR_NAME
-    config = server_root / "config" / "config.properties"
-    java_value = java_override.strip() or shutil.which("java") or ""
-    java = Path(java_value)
-    missing = [str(path) for path in (jar, config) if not path.is_file()]
-    if not java_value or not java.is_file():
-        missing.append(java_value or "java")
+def resolve_runtime(server_root: Path) -> dict[str, Path]:
+    executable = server_root / "dotnet-runtime" / DEFAULT_RUNTIME_NAME
+    config = server_root / "config" / "db.properties"
+    missing = [str(path) for path in (executable, config) if not path.is_file()]
     if missing:
         raise GunBoundLaunchError(f"GunBound runtime files are unavailable: {missing}")
-    return {"jar": jar, "config": config, "java": java}
+    return {"executable": executable, "config": config}
 
 
 def build_environment(
@@ -135,7 +130,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database-host", default="127.0.0.1")
     parser.add_argument("--database-port", type=int, default=3306)
     parser.add_argument("--database-name", default="gunbound")
-    parser.add_argument("--java", default="")
     parser.add_argument("--check", action="store_true")
     return parser.parse_args()
 
@@ -149,16 +143,15 @@ def main() -> int:
     if not args.database_host.strip() or not args.database_name.strip():
         raise GunBoundLaunchError("The database endpoint is incomplete")
     credentials = load_iris_database_credentials(credential_store)
-    runtime = resolve_runtime(server_root, args.java)
+    runtime = resolve_runtime(server_root)
     if args.check:
         print(
             json.dumps(
                 {
                     "ok": True,
                     "server_root": str(server_root),
-                    "jar": str(runtime["jar"]),
+                    "runtime": str(runtime["executable"]),
                     "config": str(runtime["config"]),
-                    "java": str(runtime["java"]),
                     "database": args.database_name,
                     "credential_keys": [IRIS_MYSQL_USER_KEY, IRIS_MYSQL_PASSWORD_KEY],
                     "credential_provider": LOCAL_MACHINE_PROVIDER,
@@ -176,14 +169,7 @@ def main() -> int:
         database_port=args.database_port,
         database_name=args.database_name.strip(),
     )
-    command = [
-        str(runtime["java"]),
-        "-Xms128m",
-        "-Xmx1024m",
-        "-XX:+UseG1GC",
-        "-jar",
-        str(runtime["jar"]),
-    ]
+    command = [str(runtime["executable"]), "--server"]
     process: subprocess.Popen[str] | None = None
     try:
         process = subprocess.Popen(command, cwd=server_root, env=environment)
