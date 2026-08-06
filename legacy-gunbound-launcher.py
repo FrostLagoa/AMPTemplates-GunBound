@@ -345,6 +345,32 @@ def stop_process(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=STOP_TIMEOUT_SECONDS)
 
 
+def write_runtime_state(path: Path, processes: tuple[subprocess.Popen[bytes], ...]) -> None:
+    """Publish a non-secret heartbeat that AMP can read across Windows sessions."""
+    payload = {
+        "version": 1,
+        "updated_at_epoch": time.time(),
+        "process_ids": [process.pid for process in processes],
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # This is observability only. A transient antivirus/indexing handle must
+        # never bring down the game services, so avoid a replace operation and
+        # deliberately tolerate a failed heartbeat write.
+        path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    except OSError as exc:
+        print(f"[legacy-launcher] runtime heartbeat warning: {exc}", flush=True)
+
+
+def clear_runtime_state(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Launch the legacy WC2 v894 GunBound services with Iris SQL credentials.")
     parser.add_argument("--server-root", type=Path, default=Path(r"D:\Gunbound"))
@@ -352,6 +378,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database-host", default="127.0.0.1")
     parser.add_argument("--database-port", type=int, default=3306)
     parser.add_argument("--database-name", default="gunbound")
+    parser.add_argument("--stop-signal", type=Path)
+    parser.add_argument("--runtime-state", type=Path)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--sanitize", action="store_true")
     return parser.parse_args()
@@ -386,6 +414,8 @@ def main() -> int:
         return 0
     processes: tuple[subprocess.Popen[bytes], subprocess.Popen[bytes], subprocess.Popen[bytes]] | None = None
     stopping = False
+    stop_signal = args.stop_signal.resolve() if args.stop_signal else None
+    runtime_state = (args.runtime_state or (server_root / "control" / "iris-runtime.json")).resolve()
 
     def handle_stop(_signum: int, _frame: Any) -> None:
         nonlocal stopping
@@ -400,15 +430,21 @@ def main() -> int:
             flush=True,
         )
         while not stopping:
+            write_runtime_state(runtime_state, processes)
+            if stop_signal is not None and stop_signal.exists():
+                print("[legacy-launcher] STOP requested by AMP", flush=True)
+                stopping = True
+                continue
             process_codes = [process.poll() for process in processes]
             if any(code is not None for code in process_codes):
                 # A child exiting, even with code 0, means the legacy server stopped
                 # unexpectedly. Return a non-zero code so the AMP supervisor can
-                # accurately surface the failure and apply its bounded recovery policy.
+                # accurately surface the failure to AMP/Iris.
                 return int(next(code for code in process_codes if code is not None) or 1)
             time.sleep(0.5)
         return 0
     finally:
+        clear_runtime_state(runtime_state)
         if processes:
             for process in reversed(processes):
                 try:

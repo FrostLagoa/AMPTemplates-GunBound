@@ -5,27 +5,20 @@ param(
     [string]$DatabaseHost = "127.0.0.1",
     [int]$DatabasePort = 3303,
     [string]$DatabaseName = "gunbound",
-    [string]$CompatibilityMySqlExecutable = "D:\Laragon\bin\mysql\mysql-5.7.44-winx64\bin\mysqld.exe",
-    [string]$CompatibilityMySqlConfig = "D:\Laragon\bin\mysql\mysql-5.7.44-winx64\my-gunbound.ini",
+    [int]$DatabaseReadyGraceSeconds = 5,
     [int]$BrokerPort = 8400,
     [int]$GamePort = 8401,
-    [string]$AutoRestart = "true",
-    [int]$RestartLimit = 3,
-    [int]$RestartBackoffSeconds = 3,
-    [int]$ShutdownTimeoutSeconds = 30
+    [int]$ShutdownTimeoutSeconds = 30,
+    [string]$RuntimeTaskName = "Iris-GunBoundWC2",
+    [string]$RuntimeLogPath = "D:\Gunbound\Logs\standalone-runtime.log",
+    [string]$StopSignalPath = "D:\Gunbound\control\iris-stop.request",
+    [string]$RuntimeStatePath = "D:\Gunbound\control\iris-runtime.json"
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+$script:runtimeLogOffset = 0L
 $script:stopping = $false
-$script:runtime = $null
-$script:compatibilityDatabase = $null
-$script:restartCount = 0
-
-function ConvertTo-Switch {
-    param([string]$Value)
-    return @("1", "true", "yes", "on", "enabled") -contains $Value.Trim().ToLowerInvariant()
-}
 
 function Assert-SafePath {
     param([string]$Value, [string]$Name)
@@ -37,47 +30,43 @@ function Test-TcpPort {
     param([int]$Port, [int]$TimeoutMilliseconds = 500)
     $client = [Net.Sockets.TcpClient]::new()
     try {
-        $task = $client.ConnectAsync("127.0.0.1", $Port)
-        if (-not $task.Wait($TimeoutMilliseconds)) { return $false }
+        $connect = $client.ConnectAsync("127.0.0.1", $Port)
+        if (-not $connect.Wait($TimeoutMilliseconds)) { return $false }
         return $client.Connected
     }
     catch { return $false }
     finally { $client.Dispose() }
 }
 
+function Test-ListeningPort {
+    param([int]$Port)
+    return [bool](Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
+
+function Test-RuntimeHeartbeat {
+    if (-not (Test-Path -LiteralPath $RuntimeStatePath -PathType Leaf)) { return $false }
+    try {
+        $age = ([DateTime]::UtcNow - (Get-Item -LiteralPath $RuntimeStatePath -Force).LastWriteTimeUtc).TotalSeconds
+        return $age -ge -5 -and $age -le 30
+    }
+    catch { return $false }
+}
+
 function Ensure-CompatibilityDatabase {
-    if (Test-TcpPort -Port $DatabasePort) {
-        [Console]::WriteLine("[supervisor] DATABASE ready host=127.0.0.1 port=$DatabasePort owner=existing")
-        return
+    if (-not (Test-TcpPort -Port $DatabasePort)) {
+        throw "GunBound MySQL 5.7 must be running separately on 127.0.0.1:$DatabasePort before AMP starts the game services"
     }
-    $executable = Assert-SafePath $CompatibilityMySqlExecutable "CompatibilityMySqlExecutable"
-    $configuration = Assert-SafePath $CompatibilityMySqlConfig "CompatibilityMySqlConfig"
-    foreach ($required in @($executable, $configuration)) {
-        if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-            throw "Required GunBound compatibility MySQL file is missing: $required"
-        }
-    }
-    $startInfo = [Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $executable
-    $startInfo.Arguments = ('--defaults-file="{0}"' -f $configuration)
-    $startInfo.WorkingDirectory = Split-Path -Parent $executable
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $process = [Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    if (-not $process.Start()) { throw "Could not start the GunBound compatibility MySQL service" }
-    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    [Console]::WriteLine("[supervisor] DATABASE reachable host=127.0.0.1 port=$DatabasePort owner=external-service")
+}
+
+function Wait-CompatibilityDatabaseStability {
+    param([int]$Port, [int]$GraceSeconds)
+    $deadline = [DateTime]::UtcNow.AddSeconds($GraceSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
-        if ($process.HasExited) { throw "GunBound compatibility MySQL exited during startup ($($process.ExitCode))" }
-        if (Test-TcpPort -Port $DatabasePort) {
-            $script:compatibilityDatabase = $process
-            [Console]::WriteLine("[supervisor] DATABASE ready host=127.0.0.1 port=$DatabasePort owner=AMP")
-            return
-        }
+        if (-not (Test-TcpPort -Port $Port)) { throw "GunBound MySQL 5.7 stopped responding during its startup grace period" }
         Start-Sleep -Milliseconds 250
     }
-    try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
-    throw "GunBound compatibility MySQL did not open TCP port $DatabasePort within 30 seconds"
+    [Console]::WriteLine("[supervisor] DATABASE stable host=127.0.0.1 port=$Port grace_seconds=$GraceSeconds")
 }
 
 function Ensure-LegacySettings {
@@ -93,35 +82,7 @@ function Ensure-LegacySettings {
         "broker.world.capacity=500",
         "broker.world.mode=0",
         "game.port=$GamePort",
-        "game.max.connection=500",
-        "game.golf.factor=100",
-        "game.score.factor=100",
-        "game.grade.first=19",
-        "game.grade.last=19",
-        "game.function.restriction=1040384",
-        "game.enable_item2=false",
-        "game.channel.message=Welcome!",
-        "game.room.message=Welcome!",
-        "game.server.classic=0",
-        "game.item.seal=30",
-        "game.item.enchant.1_4=60",
-        "game.item.enchant.5_8=50",
-        "game.item.enchant.9_12=40",
-        "game.item.enchant.13_16=30",
-        "game.item.enchant.17_18=20",
-        "game.item.enchant.19_20=10",
-        "game.item.enchant.21_30=5",
-        "client.version.first=1",
-        "client.checksum=0",
-        "event.actprop.0=0",
-        "event.actprop.1=0",
-        "event.actprop.2=0",
-        "event.actprop.3=0",
-        "event.cash.win_reward=250",
-        "event.cash.lose_reward=100",
-        "event.cash.enabled=false",
-        "event.cash.expire=0",
-        "diagnostics.log_packets=false"
+        "game.max.connection=500"
     )
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         [IO.File]::WriteAllLines($Path, $defaults, [Text.UTF8Encoding]::new($false))
@@ -131,8 +92,7 @@ function Ensure-LegacySettings {
     foreach ($default in $defaults) {
         if ($default.StartsWith("#") -or $default -notmatch "=") { continue }
         $key = $default.Split("=", 2)[0]
-        $pattern = "^\s*" + [Regex]::Escape($key) + "\s*="
-        if (-not ($lines | Where-Object { $_ -match $pattern })) { $lines.Add($default) }
+        if (-not ($lines | Where-Object { $_ -match ("^\s*" + [Regex]::Escape($key) + "\s*=") })) { $lines.Add($default) }
     }
     [IO.File]::WriteAllLines($Path, $lines, [Text.UTF8Encoding]::new($false))
 }
@@ -155,48 +115,80 @@ function Get-SettingInteger {
     if ($null -eq $match) { throw "Required setting $Key is missing" }
     $valueText = ($match -split "=", 2)[1].Trim()
     $value = 0
-    if (-not [int]::TryParse($valueText, [ref]$value) -or $value -lt $Minimum -or $value -gt $Maximum) {
-        throw "Setting $Key must be an integer between $Minimum and $Maximum"
-    }
+    if (-not [int]::TryParse($valueText, [ref]$value) -or $value -lt $Minimum -or $value -gt $Maximum) { throw "Setting $Key must be an integer between $Minimum and $Maximum" }
     return $value
 }
 
-function Get-DescendantProcessIds {
-    param([int]$RootProcessId)
-    $children = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ParentProcessId -eq $RootProcessId })
-    $result = @()
-    foreach ($child in $children) {
-        $result += Get-DescendantProcessIds -RootProcessId ([int]$child.ProcessId)
-        $result += [int]$child.ProcessId
-    }
-    return $result
+function Get-RuntimeTask {
+    try { return Get-ScheduledTask -TaskName $RuntimeTaskName -ErrorAction Stop }
+    catch { throw "The local runtime task '$RuntimeTaskName' is not available to AMP. Run Install-GunBound-WC2-Task.ps1 once with UAC." }
 }
 
-function Stop-ProcessTree {
-    param([Diagnostics.Process]$Process)
-    if ($null -eq $Process) { return }
-    $descendants = @(Get-DescendantProcessIds -RootProcessId $Process.Id | Sort-Object -Descending -Unique)
-    foreach ($processId in $descendants) { Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue }
-    if (-not $Process.HasExited) {
-        try { $Process.StandardInput.WriteLine("ampstop"); $Process.StandardInput.Flush() } catch {}
-        if (-not $Process.WaitForExit($ShutdownTimeoutSeconds * 1000)) { Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue }
-    }
+function Start-RuntimeTask {
+    Get-RuntimeTask | Out-Null
+    if (Test-Path -LiteralPath $StopSignalPath -PathType Leaf) { Remove-Item -LiteralPath $StopSignalPath -Force }
+    # Task Scheduler does not reliably expose the Running state of an
+    # InteractiveToken task to NetworkService. IgnoreNew makes this idempotent.
+    Start-ScheduledTask -TaskName $RuntimeTaskName -ErrorAction Stop
+    [Console]::WriteLine("[supervisor] START requested task=$RuntimeTaskName owner=Kallidos")
 }
 
-$restartEnabled = ConvertTo-Switch $AutoRestart
-$RestartLimit = [Math]::Max(0, [Math]::Min(10, $RestartLimit))
-$RestartBackoffSeconds = [Math]::Max(1, [Math]::Min(60, $RestartBackoffSeconds))
+function Stop-RuntimeTask {
+    try {
+        Get-RuntimeTask | Out-Null
+        New-Item -ItemType Directory -Path (Split-Path -Parent $StopSignalPath) -Force | Out-Null
+        [IO.File]::WriteAllText($StopSignalPath, "stop`n", [Text.UTF8Encoding]::new($false))
+        [Console]::WriteLine("[supervisor] STOP requested task=$RuntimeTaskName owner=Kallidos")
+        $deadline = [DateTime]::UtcNow.AddSeconds($ShutdownTimeoutSeconds)
+        do { Start-Sleep -Milliseconds 250 } while ((Test-RuntimeHeartbeat) -and [DateTime]::UtcNow -lt $deadline)
+        if (Test-RuntimeHeartbeat) { throw "Timed out waiting for the GunBound runtime heartbeat to stop" }
+        & $PythonExecutable $launcher --server-root $ServerRoot --credential-store $CredentialStorePath --sanitize 2>&1 | ForEach-Object { [Console]::WriteLine("[runtime] $_") }
+    }
+    catch { [Console]::WriteLine("[supervisor] STOP warning=$($_.Exception.Message)") }
+}
+
+function Write-RuntimeLogTail {
+    if (-not (Test-Path -LiteralPath $RuntimeLogPath -PathType Leaf)) { return }
+    $stream = [IO.File]::Open($RuntimeLogPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    try {
+        if ($stream.Length -lt $script:runtimeLogOffset) { $script:runtimeLogOffset = 0L }
+        $stream.Seek($script:runtimeLogOffset, [IO.SeekOrigin]::Begin) | Out-Null
+        $reader = [IO.StreamReader]::new($stream)
+        try {
+            while (($line = $reader.ReadLine()) -ne $null) { [Console]::WriteLine("[runtime] $line") }
+            $script:runtimeLogOffset = $stream.Position
+        }
+        finally { $reader.Dispose() }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Wait-GunBoundReady {
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        Write-RuntimeLogTail
+        if (Test-RuntimeHeartbeat) { return $true }
+        Start-Sleep -Milliseconds 250
+    }
+    return $false
+}
+
+function Test-GunBoundPorts {
+    param([int]$LanBrokerPort)
+    return (Test-ListeningPort -Port $BrokerPort) -and (Test-ListeningPort -Port $LanBrokerPort) -and (Test-ListeningPort -Port $GamePort)
+}
+
 $ShutdownTimeoutSeconds = [Math]::Max(5, [Math]::Min(120, $ShutdownTimeoutSeconds))
+$DatabaseReadyGraceSeconds = [Math]::Max(1, [Math]::Min(30, $DatabaseReadyGraceSeconds))
 $ServerRoot = Assert-SafePath $ServerRoot "ServerRoot"
 $PythonExecutable = Assert-SafePath $PythonExecutable "PythonExecutable"
 $CredentialStorePath = Assert-SafePath $CredentialStorePath "CredentialStorePath"
-$CompatibilityMySqlExecutable = Assert-SafePath $CompatibilityMySqlExecutable "CompatibilityMySqlExecutable"
-$CompatibilityMySqlConfig = Assert-SafePath $CompatibilityMySqlConfig "CompatibilityMySqlConfig"
-$DatabaseHost = $DatabaseHost.Trim()
-$DatabaseName = $DatabaseName.Trim()
-if ([string]::IsNullOrWhiteSpace($DatabaseHost) -or [string]::IsNullOrWhiteSpace($DatabaseName) -or $DatabasePort -lt 1 -or $DatabasePort -gt 65535) {
-    throw "The database endpoint is invalid"
-}
+$RuntimeLogPath = Assert-SafePath $RuntimeLogPath "RuntimeLogPath"
+$StopSignalPath = Assert-SafePath $StopSignalPath "StopSignalPath"
+$RuntimeStatePath = Assert-SafePath $RuntimeStatePath "RuntimeStatePath"
+if ($RuntimeTaskName -notmatch '^[A-Za-z0-9_.-]+$') { throw "RuntimeTaskName is invalid" }
+if ([string]::IsNullOrWhiteSpace($DatabaseHost) -or [string]::IsNullOrWhiteSpace($DatabaseName) -or $DatabasePort -lt 1 -or $DatabasePort -gt 65535) { throw "The database endpoint is invalid" }
+
 & (Join-Path $PSScriptRoot "amp-config-link.ps1") -ServerRoot $ServerRoot
 $launcher = Join-Path $PSScriptRoot "legacy-gunbound-launcher.py"
 $settings = Join-Path $ServerRoot "iris-legacy-settings.properties"
@@ -208,86 +200,21 @@ Set-SettingValue -Path $settings -Key "broker.port" -Value ([string]$BrokerPort)
 Set-SettingValue -Path $settings -Key "game.port" -Value ([string]$GamePort)
 $LanBrokerPort = Get-SettingInteger -Path $settings -Key "broker.lan.port"
 if ($LanBrokerPort -eq $BrokerPort -or $LanBrokerPort -eq $GamePort) { throw "The LAN Broker port must differ from the external Broker and Game Server ports" }
-Ensure-CompatibilityDatabase
-
-function Start-GunBound {
-    $startInfo = [Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $PythonExecutable
-    $startInfo.Arguments = ('"{0}" --server-root "{1}" --credential-store "{2}" --database-host "{3}" --database-port {4} --database-name "{5}"' -f $launcher, $ServerRoot, $CredentialStorePath, $DatabaseHost, $DatabasePort, $DatabaseName)
-    $startInfo.WorkingDirectory = $ServerRoot
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.RedirectStandardInput = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $process = [Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-    if (-not $process.Start()) { throw "Could not start the GunBound WC2 launcher" }
-    $script:runtime = [pscustomobject]@{
-        Process = $process
-        StdoutTask = $process.StandardOutput.ReadLineAsync()
-        StderrTask = $process.StandardError.ReadLineAsync()
-    }
-    [Console]::WriteLine("[supervisor] STARTED launcher_pid=$($process.Id)")
-}
-
-function Drain-GunBoundOutput {
-    if ($null -eq $script:runtime) { return }
-    foreach ($stream in @(
-        [pscustomobject]@{ TaskProperty = "StdoutTask"; Reader = $script:runtime.Process.StandardOutput; Prefix = "gunbound" },
-        [pscustomobject]@{ TaskProperty = "StderrTask"; Reader = $script:runtime.Process.StandardError; Prefix = "gunbound:stderr" }
-    )) {
-        $task = $script:runtime.($stream.TaskProperty)
-        while ($null -ne $task -and $task.IsCompleted) {
-            $line = $task.GetAwaiter().GetResult()
-            if ($null -ne $line) { [Console]::WriteLine("[$($stream.Prefix)] $line") }
-            $script:runtime.($stream.TaskProperty) = $stream.Reader.ReadLineAsync()
-            $task = $script:runtime.($stream.TaskProperty)
-        }
-    }
-}
-
-function Wait-GunBoundReady {
-    $deadline = [DateTime]::UtcNow.AddSeconds(120)
-    while ([DateTime]::UtcNow -lt $deadline) {
-        Drain-GunBoundOutput
-        if ($script:runtime.Process.HasExited) { return $false }
-        if ((Test-TcpPort -Port $BrokerPort) -and (Test-TcpPort -Port $LanBrokerPort) -and (Test-TcpPort -Port $GamePort)) { return $true }
-        Start-Sleep -Milliseconds 250
-    }
-    return $false
-}
-
-function Write-GunBoundStatus {
-    $state = if ($null -ne $script:runtime -and -not $script:runtime.Process.HasExited) { "running" } else { "stopped" }
-    [Console]::WriteLine("[supervisor] STATUS state=$state external_broker=$BrokerPort lan_broker=$LanBrokerPort game=$GamePort restarts=$script:restartCount")
-}
 
 try {
-    while (-not $script:stopping) {
-        Start-GunBound
-        if (-not (Wait-GunBoundReady)) { throw "GunBound WC2 did not open TCP ports $BrokerPort, $LanBrokerPort and $GamePort within 120 seconds" }
-        [Console]::WriteLine("[supervisor] READY external_broker=$BrokerPort lan_broker=$LanBrokerPort game=$GamePort")
-        while (-not $script:runtime.Process.HasExited) {
-            Drain-GunBoundOutput
-            if (-not (Test-TcpPort -Port $DatabasePort)) {
-                throw "GunBound compatibility MySQL is no longer listening on TCP port $DatabasePort"
-            }
-            Start-Sleep -Milliseconds 100
-        }
-        Drain-GunBoundOutput
-        if ($script:stopping) { break }
-        $exitCode = $script:runtime.Process.ExitCode
-        if (-not $restartEnabled -or $script:restartCount -ge $RestartLimit) { throw "GunBound WC2 launcher exited unexpectedly ($exitCode)" }
-        $script:restartCount++
-        [Console]::WriteLine("[supervisor] RECOVERY attempt=$script:restartCount delay=$RestartBackoffSeconds")
-        Start-Sleep -Seconds $RestartBackoffSeconds
+    Ensure-CompatibilityDatabase
+    Wait-CompatibilityDatabaseStability -Port $DatabasePort -GraceSeconds $DatabaseReadyGraceSeconds
+    Start-RuntimeTask
+    if (-not (Wait-GunBoundReady)) { throw "GunBound WC2 did not publish its runtime heartbeat within 120 seconds" }
+    [Console]::WriteLine("[supervisor] READY external_broker=$BrokerPort lan_broker=$LanBrokerPort game=$GamePort")
+    while ($true) {
+        Write-RuntimeLogTail
+        if (-not (Test-RuntimeHeartbeat)) { throw "GunBound WC2 stopped publishing its runtime heartbeat" }
+        if (-not (Test-TcpPort -Port $DatabasePort)) { throw "GunBound MySQL 5.7 is no longer listening on TCP port $DatabasePort" }
+        Start-Sleep -Seconds 1
     }
 }
 finally {
-    if ($null -ne $script:runtime) { Stop-ProcessTree -Process $script:runtime.Process }
-    if ($null -ne $script:compatibilityDatabase -and -not $script:compatibilityDatabase.HasExited) {
-        try { Stop-Process -Id $script:compatibilityDatabase.Id -Force -ErrorAction SilentlyContinue } catch {}
-    }
+    Stop-RuntimeTask
     [Console]::WriteLine("[supervisor] STOPPED")
 }

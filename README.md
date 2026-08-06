@@ -1,11 +1,12 @@
 # GunBound World Champion Season 2 v894 AMP template
 
 This template controls the operator-provided native WC2 v894 server in
-`D:\Gunbound`. It starts the original `BrokerServer.exe` and
-`GameServer.exe` as one supervised application, keeps their output in the AMP
-Console, and verifies the external Broker (`8400/TCP`), LAN Broker
-(`8402/TCP`) and shared Game (`8401/TCP`) ports before AMP reports the
-instance ready.
+`D:\Gunbound`. AMP controls a demand-only `Iris-GunBoundWC2` task which starts
+the original `BrokerServer.exe` and `GameServer.exe` in the Kallidos session.
+The demand-only task launches an independent hidden worker, so AMP's
+`NetworkService` console lifecycle cannot inject `Ctrl+C` into the native
+processes. The worker publishes a non-secret, private heartbeat while AMP
+mirrors its read-only runtime log in the Console.
 
 ## Dual-Broker networking
 
@@ -32,9 +33,11 @@ bound only to `127.0.0.1:3303`. It owns only the `gunbound` schema and uses the
 same scoped Iris SQL identity as every other game integration. It neither
 changes nor exposes the MySQL 8.4 service used by Iris and the other games.
 
-The AMP supervisor starts that loopback-only companion when necessary, checks
-that it remains available, and starts the native Broker/Game pair only after
-the database is ready. The companion database is not a public game port.
+The `GunBoundMySQL57` Windows service starts this loopback-only companion with
+Windows, independently of AMP. AMP checks that it is available, waits through
+a short readiness window, and then starts only the native Broker/Game pair.
+Stopping or restarting the AMP instance never stops the database service. The
+companion database is not a public game port.
 
 The scoped credential store contains machine-DPAPI-protected values only. The
 launcher projects the required native JSON database block immediately before
@@ -52,7 +55,10 @@ flags, cash-event parameters and packet diagnostics. Values are written to the
 runtime settings file and applied on the next AMP start/restart.
 
 AMP lifecycle commands are the supported way to start, stop and restart the
-server. Native WC2 binaries do not expose a safe console protocol for Iris
+server. The runtime task has no Windows trigger, recovery rule or scheduled
+stop: it changes state only when AMP/Iris explicitly controls it. AMP starts
+the task on demand and stops the hidden worker through a private stop marker;
+the marker and heartbeat never expose a network port or credentials. Native WC2 binaries do not expose a safe console protocol for Iris
 in-game chat injection; the template deliberately reports that capability as
 unavailable rather than accepting a message it cannot deliver.
 
